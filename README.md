@@ -131,6 +131,21 @@ homeassistant:
   packages: !include_dir_named packages
 ```
 
+## Pièces
+
+| Pièce | Vannes | Occupants | Confort / Nuit / Absence |
+|---|---|---|---|
+| Chambre Léo | 1 | Léo | 19,5 / 17 / 15 |
+| Chambre Pablo | 1 | Pablo | 19,5 / 17 / 15 |
+| Salle de bains enfants | 1 | Léo, Pablo | 21 / 18 / 15 |
+| Chambre Lolo | **aucune** — clim seule | Lolo | 19,5 / 17 / 15 |
+| Cuisine | 2 | tous | 19 / 16,5 / 15 |
+| Salon | 2 | tous | 20,5 / 17,5 / 15 |
+
+Une pièce peut porter plusieurs vannes : elles reçoivent toutes la même
+consigne. Les pièces communes se déclenchent dès qu'une personne est
+présente, quelle qu'elle soit.
+
 ## Logique de chauffage
 
 ### Règle de décision

@@ -27,7 +27,7 @@ template:
               {
                 'chambre_leo': {
                   'nom': 'Chambre Léo',
-                  'vanne': 'climate.vanne_chambre_leo',
+                  'vannes': ['climate.vanne_chambre_leo'],
                   'sonde': 'sensor.temperature_chambre_leo',
                   'occupants': ['leo'],
                   'clim': none,
@@ -36,7 +36,7 @@ template:
                 },
                 'chambre_pablo': {
                   'nom': 'Chambre Pablo',
-                  'vanne': 'climate.vanne_chambre_pablo',
+                  'vannes': ['climate.vanne_chambre_pablo'],
                   'sonde': 'sensor.temperature_chambre_pablo',
                   'occupants': ['pablo'],
                   'clim': none,
@@ -45,7 +45,7 @@ template:
                 },
                 'sdb_enfants': {
                   'nom': 'Salle de bains enfants',
-                  'vanne': 'climate.vanne_sdb_enfants',
+                  'vannes': ['climate.vanne_sdb_enfants'],
                   'sonde': 'sensor.temperature_sdb_enfants',
                   'occupants': ['leo', 'pablo'],
                   'clim': none,
@@ -54,20 +54,29 @@ template:
                 },
                 'chambre_laurent': {
                   'nom': 'Chambre Lolo',
-                  'vanne': none,
+                  'vannes': [],
                   'sonde': 'sensor.temperature_chambre_laurent',
                   'occupants': ['laurent'],
                   'clim': 'climate.clim_chambre_lolo',
                   'humidite': 'sensor.humidite_chambre_laurent',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
-                'sejour': {
-                  'nom': 'Séjour',
-                  'vanne': 'climate.vanne_sejour',
-                  'sonde': 'sensor.temperature_sejour',
+                'cuisine': {
+                  'nom': 'Cuisine',
+                  'vannes': ['climate.vanne_cuisine_1', 'climate.vanne_cuisine_2'],
+                  'sonde': 'sensor.temperature_cuisine',
+                  'occupants': ['leo', 'pablo', 'laurent'],
+                  'clim': none,
+                  'humidite': 'sensor.humidite_cuisine',
+                  'confort': 19.0, 'nuit': 16.5, 'absence': 15.0
+                },
+                'salon': {
+                  'nom': 'Salon',
+                  'vannes': ['climate.vanne_salon_1', 'climate.vanne_salon_2'],
+                  'sonde': 'sensor.temperature_salon',
                   'occupants': ['laurent'],
                   'clim': none,
-                  'humidite': 'sensor.humidite_sejour',
+                  'humidite': 'sensor.humidite_salon',
                   'confort': 20.5, 'nuit': 17.5, 'absence': 15.0
                 }
               }
@@ -178,7 +187,7 @@ template:
               {# Sans radiateur, la clim assure la pièce en toute saison :
                  le seuil de rentabilité de la PAC ne s'applique pas, il n'y a
                  pas d'alternative. #}
-              {% set sans_radiateur = not c.vanne %}
+              {% set sans_radiateur = c.vannes | count == 0 %}
               {% set v = 'clim' if (c.clim and (sans_radiateur
                                     or (autorise and text >= seuil and demande)))
                          else 'radiateur' %}
@@ -277,8 +286,12 @@ input_boolean:
   confort_chambre_laurent:
     name: "Confort - Chambre Laurent"
     icon: mdi:sofa
-  confort_sejour:
-    name: "Confort - Séjour"
+  confort_cuisine:
+    name: "Confort - Cuisine"
+    icon: mdi:silverware-fork-knife
+
+  confort_salon:
+    name: "Confort - Salon"
     icon: mdi:sofa
 
 input_select:
@@ -323,7 +336,8 @@ automation:
           - input_boolean.confort_chambre_pablo
           - input_boolean.confort_sdb_enfants
           - input_boolean.confort_chambre_laurent
-          - input_boolean.confort_sejour
+          - input_boolean.confort_cuisine
+          - input_boolean.confort_salon
           - schedule.chauffage
       - platform: time_pattern
         minutes: "/15"          # resynchronisation : une vanne peut rater un ordre Zigbee
@@ -355,32 +369,38 @@ automation:
                      if (state_attr('sensor.chauffage_relais', 'relais')
                          or {}).get(repeat.item, 'radiateur') == 'clim'
                      else c }}
-            # Un `condition:` ici interromprait TOUTE la boucle, pas la seule
-            # itération : les pièces suivantes ne seraient jamais pilotées.
-            # D'où l'usage exclusif de `if/then`.
-            - if:
-                - condition: template
-                  value_template: >-
-                    {{ cfg.vanne
-                       and states(cfg.vanne) not in ['unknown', 'unavailable']
-                       and (state_attr(cfg.vanne, 'temperature')
-                            | float(default=-99) - cible) | abs > 0.2 }}
-              then:
-                # La vanne doit chauffer : 15° tient lieu de hors-gel.
-                - if:
-                    - condition: template
-                      value_template: "{{ states(cfg.vanne) == 'off' }}"
-                  then:
-                    - service: climate.set_hvac_mode
-                      target:
-                        entity_id: "{{ cfg.vanne }}"
-                      data:
-                        hvac_mode: heat
-                - service: climate.set_temperature
-                  target:
-                    entity_id: "{{ cfg.vanne }}"
-                  data:
-                    temperature: "{{ cible }}"
+            # Boucle imbriquée : une pièce peut porter plusieurs vannes,
+            # qui reçoivent toutes la même consigne. `piece` et `cible` sont
+            # capturés au-dessus, car `repeat.item` va être redéfini ici.
+            - repeat:
+                for_each: "{{ cfg.vannes }}"
+                sequence:
+                  - variables:
+                      vanne: "{{ repeat.item }}"
+                  # `if/then` et non `condition:` : une condition qui échoue
+                  # interromprait la boucle entière, pas la seule itération.
+                  - if:
+                      - condition: template
+                        value_template: >-
+                          {{ states(vanne) not in ['unknown', 'unavailable']
+                             and (state_attr(vanne, 'temperature')
+                                  | float(default=-99) - cible) | abs > 0.2 }}
+                    then:
+                      # La vanne doit chauffer : 15° tient lieu de hors-gel.
+                      - if:
+                          - condition: template
+                            value_template: "{{ states(vanne) == 'off' }}"
+                        then:
+                          - service: climate.set_hvac_mode
+                            target:
+                              entity_id: "{{ vanne }}"
+                            data:
+                              hvac_mode: heat
+                      - service: climate.set_temperature
+                        target:
+                          entity_id: "{{ vanne }}"
+                        data:
+                          temperature: "{{ cible }}"
 
   ##############################################################################
   # Bascule de garde selon la parité de semaine.
@@ -425,7 +445,8 @@ automation:
           - input_boolean.confort_chambre_pablo
           - input_boolean.confort_sdb_enfants
           - input_boolean.confort_chambre_laurent
-          - input_boolean.confort_sejour
+          - input_boolean.confort_cuisine
+          - input_boolean.confort_salon
         to: "on"
     action:
       - delay:

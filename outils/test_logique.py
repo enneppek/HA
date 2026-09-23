@@ -169,6 +169,14 @@ verifier("semaine impaire : SdB enfants au confort", m.consignes['sdb_enfants'],
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], horaire=False, semaine=41))
 verifier("hors horaire : repli de nuit", m.consignes['chambre_leo'], 17.0)
 
+titre("Pièces communes")
+m = evaluer(Monde(presents=['leo'], semaine=41))
+verifier("cuisine chauffée dès qu'une personne est là",
+         m.consignes['cuisine'], 19.0)
+m = evaluer(Monde(presents=[], semaine=41))
+verifier("maison vide : cuisine à 15°", m.consignes['cuisine'], 15.0)
+verifier("maison vide : salon à 15°", m.consignes['salon'], 15.0)
+
 titre("Présences partielles")
 m = evaluer(Monde(presents=['leo', 'laurent'], semaine=41))
 verifier("Léo présent : sa chambre chauffe", m.consignes['chambre_leo'], 19.5)
@@ -185,7 +193,7 @@ verifier("les autres pièces ne bougent pas", m.consignes['chambre_leo'], 15.0)
 titre("Arbitrage radiateur / clim")
 froid_partout = {f'sensor.temperature_{p}': 16.0 for p in
                  ['chambre_leo', 'chambre_pablo', 'sdb_enfants',
-                  'chambre_laurent', 'sejour']}
+                  'chambre_laurent', 'salon', 'cuisine']}
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
                   temps=froid_partout, exterieur=12.0, clim_chaud=True))
@@ -193,8 +201,13 @@ verifier("chambre Lolo (sans radiateur) revient à la clim",
          m.relais['chambre_laurent'], 'clim')
 verifier("les pièces avec radiateur restent au radiateur",
          m.relais['chambre_leo'], 'radiateur')
-verifier("séjour (radiateur, pas de clim) au radiateur",
-         m.relais['sejour'], 'radiateur')
+verifier("salon (radiateur, pas de clim) au radiateur",
+         m.relais['salon'], 'radiateur')
+verifier("le salon porte bien deux vannes",
+         len(m.pieces['salon']['vannes']), 2)
+verifier("la cuisine aussi", len(m.pieces['cuisine']['vannes']), 2)
+verifier("la chambre de Lolo n'en porte aucune",
+         m.pieces['chambre_laurent']['vannes'], [])
 
 m = evaluer(Monde(presents=['laurent'], semaine=41, temps=froid_partout,
                   exterieur=-5.0, clim_chaud=True))
@@ -212,20 +225,28 @@ titre("Chaudière")
 m = evaluer(Monde(presents=['leo', 'laurent'], semaine=41,
                   temps={**froid_partout,
                          'sensor.temperature_sdb_enfants': 22.0,
-                         'sensor.temperature_sejour': 21.0}))
+                         'sensor.temperature_salon': 21.0}))
 verifier("déficit chez Léo -> demande", rendre(TPL_DEMANDE, m), 'True')
 
 m = evaluer(Monde(presents=['laurent'], semaine=40,
-                  temps={**froid_partout, 'sensor.temperature_sejour': 21.0}))
+                  temps={**froid_partout,
+                         'sensor.temperature_salon': 21.0,
+                         'sensor.temperature_cuisine': 21.0}))
 verifier("chambres vides à 16° (>15) -> pas de demande",
          rendre(TPL_DEMANDE, m), 'False')
 
 m = evaluer(Monde(presents=['laurent'], semaine=41,
-                  temps={**froid_partout, 'sensor.temperature_sejour': 21.0}))
+                  temps={**froid_partout,
+                         'sensor.temperature_salon': 21.0,
+                         'sensor.temperature_cuisine': 21.0}))
 verifier("chambre Lolo froide mais servie par la clim -> pas de chaudière",
          rendre(TPL_DEMANDE, m), 'False')
 
 # =============================================================================
+m = evaluer(Monde(presents=['laurent'], semaine=40,
+                  temps={**froid_partout, 'sensor.temperature_salon': 21.0}))
+verifier("cuisine froide et occupée -> demande", rendre(TPL_DEMANDE, m), 'True')
+
 titre("Clim — déshumidification (comportement par défaut)")
 m = evaluer(Monde(presents=['laurent'], semaine=41,
                   temps={'sensor.temperature_chambre_laurent': 19.0},
@@ -332,7 +353,7 @@ m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
 double = [p for p in m.pieces
           if m.relais.get(p) == 'clim'
           and m.consignes.get(p, 0) > m.pieces[p]['absence']
-          and m.pieces[p]['vanne']]
+          and m.pieces[p]['vannes']]
 verifier("aucune pièce chauffée par les deux sources à la fois", double, [])
 verifier("état du capteur = consigne maximale", rendre(TPL_ETAT, m), '21.0')
 

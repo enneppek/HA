@@ -85,8 +85,14 @@ cards:
         tap_action:
           action: toggle
       - type: button
-        entity: input_boolean.confort_sejour
-        name: Séjour
+        entity: input_boolean.confort_cuisine
+        name: Cuisine
+        icon: mdi:silverware-fork-knife
+        tap_action:
+          action: toggle
+      - type: button
+        entity: input_boolean.confort_salon
+        name: Salon
         icon: mdi:sofa
         tap_action:
           action: toggle
@@ -104,8 +110,10 @@ cards:
         name: SdB enfants
       - entity: sensor.temperature_chambre_laurent
         name: Chambre Lolo
-      - entity: sensor.temperature_sejour
-        name: Séjour
+      - entity: sensor.temperature_cuisine
+        name: Cuisine
+      - entity: sensor.temperature_salon
+        name: Salon
       - type: divider
       - entity: climate.lyric_t6
         name: Chaudière (Lyric T6)
