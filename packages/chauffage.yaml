@@ -1,0 +1,412 @@
+################################################################################
+# CHAUFFAGE — pilotage par présence, parité de semaine et horaire
+#
+# Principe : toute la logique est centralisée dans sensor.chauffage_consignes,
+# qui calcule une température cible par pièce. Les automatisations ne font
+# qu'appliquer ce calcul aux vannes. Pour modifier le comportement, il suffit
+# donc de toucher au bloc de configuration ci-dessous.
+#
+# >>> LES IDENTIFIANTS D'ENTITÉS SONT DES SUPPOSITIONS <<<
+# Remplacer ceux du bloc `pieces` par les vrais (voir outils/export_entites.jinja).
+################################################################################
+
+################################################################################
+# 1. CONFIGURATION DES PIÈCES — le seul bloc à adapter
+################################################################################
+template:
+  - sensor:
+      - name: "Chauffage configuration"
+        unique_id: chauffage_configuration
+        icon: mdi:home-thermometer
+        state: >-
+          {{ state_attr('sensor.chauffage_configuration', 'pieces') | count
+             if state_attr('sensor.chauffage_configuration', 'pieces') else 5 }}
+        attributes:
+          pieces: >-
+            {{
+              {
+                'chambre_leo': {
+                  'nom': 'Chambre Léo',
+                  'vanne': 'climate.vanne_chambre_leo',
+                  'sonde': 'sensor.temperature_chambre_leo',
+                  'occupants': ['leo'],
+                  'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
+                },
+                'chambre_pablo': {
+                  'nom': 'Chambre Pablo',
+                  'vanne': 'climate.vanne_chambre_pablo',
+                  'sonde': 'sensor.temperature_chambre_pablo',
+                  'occupants': ['pablo'],
+                  'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
+                },
+                'sdb_enfants': {
+                  'nom': 'Salle de bains enfants',
+                  'vanne': 'climate.vanne_sdb_enfants',
+                  'sonde': 'sensor.temperature_sdb_enfants',
+                  'occupants': ['leo', 'pablo'],
+                  'confort': 21.0, 'nuit': 18.0, 'absence': 15.0
+                },
+                'chambre_laurent': {
+                  'nom': 'Chambre Laurent',
+                  'vanne': 'climate.vanne_chambre_laurent',
+                  'sonde': 'sensor.temperature_chambre_laurent',
+                  'occupants': ['laurent'],
+                  'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
+                },
+                'sejour': {
+                  'nom': 'Séjour',
+                  'vanne': 'climate.vanne_sejour',
+                  'sonde': 'sensor.temperature_sejour',
+                  'occupants': ['laurent'],
+                  'confort': 20.5, 'nuit': 17.5, 'absence': 15.0
+                }
+              }
+            }}
+
+  ##############################################################################
+  # 2. CALCUL DES CONSIGNES — cœur de la logique
+  #
+  # Priorité, de la plus forte à la plus faible :
+  #   1. Bouton confort de la pièce pressé      -> température de confort
+  #   2. Un occupant présent + horaire actif    -> température de confort
+  #   3. Un occupant présent, hors horaire      -> température de nuit
+  #   4. Aucun occupant présent                 -> température d'absence (15°)
+  ##############################################################################
+  - sensor:
+      - name: "Chauffage consignes"
+        unique_id: chauffage_consignes
+        unit_of_measurement: "°C"
+        state: >-
+          {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+          {% set ns = namespace(presents=[]) %}
+          {% for q in ['leo', 'pablo', 'laurent'] %}
+            {% if is_state('input_boolean.presence_' ~ q, 'on') %}
+              {% set ns.presents = ns.presents + [q] %}
+            {% endif %}
+          {% endfor %}
+          {% set horaire = is_state('schedule.chauffage', 'on') %}
+          {% set nt = namespace(maxi=0) %}
+          {% for p, c in cfg.items() %}
+            {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
+            {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
+            {% set t = c.confort if (boost or (occupe and horaire))
+                       else (c.nuit if occupe else c.absence) %}
+            {% if t | float > nt.maxi %}{% set nt.maxi = t | float %}{% endif %}
+          {% endfor %}
+          {{ nt.maxi }}
+        attributes:
+          consignes: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set ns = namespace(presents=[]) %}
+            {% for q in ['leo', 'pablo', 'laurent'] %}
+              {% if is_state('input_boolean.presence_' ~ q, 'on') %}
+                {% set ns.presents = ns.presents + [q] %}
+              {% endif %}
+            {% endfor %}
+            {% set horaire = is_state('schedule.chauffage', 'on') %}
+            {% set nd = namespace(d={}) %}
+            {% for p, c in cfg.items() %}
+              {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
+              {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
+              {% set t = c.confort if (boost or (occupe and horaire))
+                         else (c.nuit if occupe else c.absence) %}
+              {% set nd.d = dict(nd.d.items() | list + [(p, t | float)]) %}
+            {% endfor %}
+            {{ nd.d }}
+          horaire_actif: "{{ is_state('schedule.chauffage', 'on') }}"
+          semaine_numero: "{{ now().isocalendar()[1] }}"
+          semaine_paire: "{{ now().isocalendar()[1] % 2 == 0 }}"
+
+  ##############################################################################
+  # 3. DEMANDE CHAUDIÈRE
+  # Vrai dès qu'une pièce accuse un déficit > 0.3 °C. Le delay_off de 10 min
+  # évite que la chaudière ne cycle en courts créneaux.
+  ##############################################################################
+  - binary_sensor:
+      - name: "Chauffage demande chaudière"
+        unique_id: chauffage_demande_chaudiere
+        device_class: heat
+        delay_off: "00:10:00"
+        state: >-
+          {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+          {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+          {% set ns = namespace(demande=false) %}
+          {% for p, c in cfg.items() %}
+            {% set mesure = states(c.sonde) | float(default=99) %}
+            {% set cible = consignes.get(p, 0) | float(default=0) %}
+            {% if mesure < (cible - 0.3) %}{% set ns.demande = true %}{% endif %}
+          {% endfor %}
+          {{ ns.demande }}
+        attributes:
+          deficit_max: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+            {% set ns = namespace(d=0) %}
+            {% for p, c in cfg.items() %}
+              {% set ecart = (consignes.get(p, 0) | float(default=0))
+                             - (states(c.sonde) | float(default=99)) %}
+              {% if ecart > ns.d %}{% set ns.d = ecart %}{% endif %}
+            {% endfor %}
+            {{ ns.d | round(1) }}
+
+################################################################################
+# 4. HORAIRE — semaines impaires et présence
+# Modifiable ensuite dans l'interface : Paramètres > Appareils et services >
+# Entrées > Planifications.
+################################################################################
+schedule:
+  chauffage:
+    name: "Chauffage - horaire"
+    icon: mdi:calendar-clock
+    monday: &semaine
+      - from: "06:00:00"
+        to: "08:30:00"
+      - from: "16:30:00"
+        to: "22:00:00"
+    tuesday: *semaine
+    wednesday: *semaine
+    thursday: *semaine
+    friday:
+      - from: "06:00:00"
+        to: "08:30:00"
+      - from: "16:30:00"
+        to: "23:00:00"
+    saturday: &weekend
+      - from: "08:00:00"
+        to: "23:00:00"
+    sunday:
+      - from: "08:00:00"
+        to: "22:00:00"
+
+################################################################################
+# 5. COMMANDES — présence, confort par pièce, mode de garde
+################################################################################
+input_boolean:
+  presence_leo:
+    name: "Léo"
+    icon: mdi:account
+  presence_pablo:
+    name: "Pablo"
+    icon: mdi:account
+  presence_laurent:
+    name: "Laurent"
+    icon: mdi:account
+
+  confort_chambre_leo:
+    name: "Confort - Chambre Léo"
+    icon: mdi:sofa
+  confort_chambre_pablo:
+    name: "Confort - Chambre Pablo"
+    icon: mdi:sofa
+  confort_sdb_enfants:
+    name: "Confort - Salle de bains enfants"
+    icon: mdi:shower
+  confort_chambre_laurent:
+    name: "Confort - Chambre Laurent"
+    icon: mdi:sofa
+  confort_sejour:
+    name: "Confort - Séjour"
+    icon: mdi:sofa
+
+input_select:
+  garde_enfants:
+    name: "Garde des enfants"
+    icon: mdi:calendar-account
+    options:
+      - "Automatique (parité)"
+      - "Présents"
+      - "Absents"
+    initial: "Automatique (parité)"
+
+input_number:
+  duree_confort:
+    name: "Durée d'un appui confort"
+    icon: mdi:timer-sand
+    min: 30
+    max: 480
+    step: 30
+    unit_of_measurement: min
+    initial: 120
+
+################################################################################
+# 6. AUTOMATISATIONS
+################################################################################
+automation:
+  ##############################################################################
+  # Applique les consignes calculées aux vannes Sonoff.
+  # Déclenchée par les entrées plutôt que par le capteur : un changement
+  # d'attribut ne déclenche pas de façon fiable.
+  ##############################################################################
+  - id: chauffage_application_consignes
+    alias: "Chauffage - appliquer les consignes"
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id:
+          - input_boolean.presence_leo
+          - input_boolean.presence_pablo
+          - input_boolean.presence_laurent
+          - input_boolean.confort_chambre_leo
+          - input_boolean.confort_chambre_pablo
+          - input_boolean.confort_sdb_enfants
+          - input_boolean.confort_chambre_laurent
+          - input_boolean.confort_sejour
+          - schedule.chauffage
+      - platform: time_pattern
+        minutes: "/15"          # resynchronisation : une vanne peut rater un ordre Zigbee
+      - platform: homeassistant
+        event: start
+    action:
+      - delay: "00:00:05"       # laisse le capteur de consignes se recalculer
+      - repeat:
+          for_each: >-
+            {{ (state_attr('sensor.chauffage_configuration', 'pieces') or {})
+               | list }}
+          sequence:
+            - variables:
+                piece: "{{ repeat.item }}"
+                cfg: >-
+                  {{ (state_attr('sensor.chauffage_configuration', 'pieces')
+                      or {})[repeat.item] }}
+                cible: >-
+                  {{ (state_attr('sensor.chauffage_consignes', 'consignes')
+                      or {}).get(repeat.item, 15) | float(default=15) }}
+            - condition: template
+              value_template: >-
+                {{ states(cfg.vanne) not in ['unknown', 'unavailable'] }}
+            # La vanne doit chauffer : 15° tient lieu de hors-gel.
+            - if:
+                - condition: template
+                  value_template: "{{ states(cfg.vanne) == 'off' }}"
+              then:
+                - service: climate.set_hvac_mode
+                  target:
+                    entity_id: "{{ cfg.vanne }}"
+                  data:
+                    hvac_mode: heat
+            - condition: template
+              value_template: >-
+                {{ (state_attr(cfg.vanne, 'temperature') | float(default=-99)
+                    - cible) | abs > 0.2 }}
+            - service: climate.set_temperature
+              target:
+                entity_id: "{{ cfg.vanne }}"
+              data:
+                temperature: "{{ cible }}"
+
+  ##############################################################################
+  # Bascule de garde selon la parité de semaine.
+  # Semaine PAIRE   -> enfants absents  -> chambres et SdB enfants à 15 °C
+  # Semaine IMPAIRE -> enfants présents -> chauffage suivant l'horaire
+  ##############################################################################
+  - id: chauffage_bascule_garde
+    alias: "Chauffage - bascule de semaine"
+    mode: single
+    trigger:
+      - platform: time
+        at: "00:05:00"
+      - platform: state
+        entity_id: input_select.garde_enfants
+      - platform: homeassistant
+        event: start
+    action:
+      - variables:
+          presents: >-
+            {% set mode = states('input_select.garde_enfants') %}
+            {% if mode == 'Présents' %}true
+            {% elif mode == 'Absents' %}false
+            {% else %}{{ now().isocalendar()[1] % 2 == 1 }}{% endif %}
+      - service: "input_boolean.turn_{{ 'on' if presents | bool else 'off' }}"
+        target:
+          entity_id:
+            - input_boolean.presence_leo
+            - input_boolean.presence_pablo
+
+  ##############################################################################
+  # Un appui confort s'éteint tout seul, pour ne pas chauffer une pièce vide
+  # jusqu'au lendemain.
+  ##############################################################################
+  - id: chauffage_extinction_confort
+    alias: "Chauffage - extinction automatique du confort"
+    mode: parallel
+    max: 10
+    trigger:
+      - platform: state
+        entity_id:
+          - input_boolean.confort_chambre_leo
+          - input_boolean.confort_chambre_pablo
+          - input_boolean.confort_sdb_enfants
+          - input_boolean.confort_chambre_laurent
+          - input_boolean.confort_sejour
+        to: "on"
+    action:
+      - delay:
+          minutes: "{{ states('input_number.duree_confort') | int(default=120) }}"
+      - service: input_boolean.turn_off
+        target:
+          entity_id: "{{ trigger.entity_id }}"
+
+  ##############################################################################
+  # Chaudière mazout via le Lyric T6.
+  # Le T6 est le thermostat d'ambiance : tant qu'il est satisfait, la chaudière
+  # s'arrête et les vannes n'ont plus d'eau chaude. On le pousse donc haut dès
+  # qu'une pièce réclame, et on le laisse retomber sinon.
+  ##############################################################################
+  - id: chauffage_pilotage_chaudiere
+    alias: "Chauffage - pilotage de la chaudière"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.chauffage_demande_chaudiere
+        to: ["on", "off"]
+      - platform: time_pattern
+        minutes: "/30"
+      - platform: homeassistant
+        event: start
+    condition:
+      - condition: template
+        value_template: >-
+          {{ states('climate.lyric_t6') not in ['unknown', 'unavailable'] }}
+    action:
+      - variables:
+          cible: >-
+            {{ 22 if is_state('binary_sensor.chauffage_demande_chaudiere', 'on')
+               else 15 }}
+      - condition: template
+        value_template: >-
+          {{ state_attr('climate.lyric_t6', 'temperature') | float(default=-99)
+             != cible | float }}
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.lyric_t6
+        data:
+          temperature: "{{ cible }}"
+
+  ##############################################################################
+  # La vanne de Léo régule sur sa propre sonde interne, collée au radiateur,
+  # donc trop chaude. On lui injecte la mesure de la sonde Sonoff de la pièce.
+  #
+  # Suppose une vanne TRVZB sous Zigbee2MQTT, qui expose
+  # number.<vanne>_external_temperature_input. Sinon, voir le README.
+  ##############################################################################
+  - id: chauffage_sonde_externe_leo
+    alias: "Chauffage - sonde externe chambre Léo"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: sensor.temperature_chambre_leo
+      - platform: time_pattern
+        minutes: "/10"
+    condition:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.temperature_chambre_leo')
+             not in ['unknown', 'unavailable']
+             and states('number.vanne_chambre_leo_external_temperature_input')
+             not in ['unknown', 'unavailable'] }}
+    action:
+      - service: number.set_value
+        target:
+          entity_id: number.vanne_chambre_leo_external_temperature_input
+        data:
+          value: "{{ states('sensor.temperature_chambre_leo') | float }}"
