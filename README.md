@@ -25,6 +25,12 @@ Une session Claude Code hébergée dans le cloud ne peut pas joindre
 un LAN privé ni vers un tailnet. Les automatisations se développent donc
 depuis une machine du réseau local, qui elle a accès à l'instance.
 
+### Première mise en service
+
+Aucun `initial:` n'est posé sur les interrupteurs, afin qu'un redémarrage
+n'écrase pas tes choix. Après la première installation, pense donc à activer
+**Limiter l'humidité** et **Maintenir une température minimale** sur la carte.
+
 ### Mise en place sur une machine du LAN
 
 Claude Code s'installe en ligne de commande. Choisir l'onglet correspondant
@@ -219,56 +225,88 @@ de 0,3 °C et retombe avec 10 minutes de retard (`delay_off`), pour éviter
 que la chaudière ne s'allume et s'éteigne en rafale. À ajuster selon
 l'inertie réelle de l'installation.
 
-## Climatisation Panasonic
+## Climatisation Panasonic — chambre de Lolo
 
-La clim est dans la **chambre de Lolo, qui n'a pas de radiateur**. Elle y est
-donc l'unique source de chaleur, ce qui a deux conséquences dans la logique :
+Cette pièce **n'a aucun radiateur**. La clim y est l'unique source de
+chaleur, ce qui lui donne deux garanties à tenir, toutes deux réglables
+depuis la carte, et mesurées sur la sonde d'ambiance Sonoff de la pièce :
 
-- le seuil de rentabilité de la pompe à chaleur ne s'y applique pas — par
-  grand froid la clim chauffe quand même, faute d'alternative ;
-- elle ne s'arrête pas quand la pièce est vide, sinon le hors-gel
-  disparaîtrait. La consigne vaut alors 15 °C, comme pour un radiateur.
+| Garantie | Réglage | Défaut |
+|---|---|---|
+| Température minimale | `input_number.clim_temp_min` | 15 °C |
+| Humidité relative maximale | `input_number.clim_seuil_humidite` | 65 % |
 
-Rafraîchissement et déshumidification, eux, restent conditionnés à la
-présence : refroidir une pièce vide ne sert personne.
+Chacune se désactive : `input_boolean.clim_maintien_temp_min` et
+`input_boolean.clim_auto_deshu`.
 
-### Arbitrage
+En dehors de ces deux garanties, la clim ne fait rien. Le rafraîchissement
+d'été et l'appoint chauffage existent, mais sont **désactivés par défaut** :
+ce sont deux interrupteurs à activer si le besoin s'en fait sentir.
+
+### Assèchement par le mode chaud
+
+L'assèchement passe par le mode **chaud**, et non par le mode `dry` : sur
+cette Panasonic, le mode chaud fait tomber l'humidité relative bien plus
+efficacement. Il l'abaisse en réchauffant l'air plutôt qu'en extrayant de
+l'eau — ce qui est justement l'effet recherché contre la condensation et les
+moisissures sur les parois froides.
+
+La consigne visée vaut `température ambiante + clim_deshu_delta` (1,5 °C par
+défaut), bornée par `clim_deshu_temp_max` (22 °C) : il s'agit d'assécher, pas
+de cuire la pièce. Au-delà de cette limite, l'assèchement s'interrompt.
+
+Une hystérésis de 5 points évite le battement : l'assèchement démarre
+au-dessus du seuil et ne s'arrête que 5 points en dessous.
+
+### Priorités
+
+| Priorité | Condition | Mode |
+|---|---|---|
+| 1 | Sous la température minimale | Chaud, jusqu'à ce minimum |
+| 2 | Rafraîchissement activé, occupant présent, trop chaud | Froid |
+| 3 | Appoint activé et pièce confiée à la clim | Chaud, consigne du moment |
+| 4 | Humidité au-dessus du seuil | Chaud (assèchement) |
+| 5 | Sinon | Arrêt |
+
+La température minimale passe avant tout le reste : une pièce sans radiateur
+qui se refroidit n'a aucun recours.
+
+### Pilotage manuel
+
+Dès qu'une consigne est posée **à la main depuis Home Assistant**,
+`input_boolean.clim_pilotage_manuel` s'active et l'automatisation se tait
+pendant `clim_duree_manuel` (3 h par défaut), puis reprend d'elle-même.
+
+La détection repose sur `context.user_id`, renseigné uniquement quand un
+humain agit depuis Home Assistant : une commande émise par une automatisation
+en est dépourvue, ce qui évite que le pilotage ne se prenne lui-même pour toi.
+
+**Limite connue :** un réglage fait depuis la télécommande infrarouge ou
+l'application Comfort Cloud n'a pas davantage de `user_id` et passera donc
+inaperçu. Dans ce cas, active l'interrupteur de pilotage manuel toi-même.
+
+### Arbitrage avec la chaudière
 
 `sensor.chauffage_relais` désigne, pour chaque pièce, qui délivre la chaleur.
-Sans cet arbitrage, la chaudière et la clim chaufferaient la même pièce en
-même temps.
+Sans cet arbitrage, la chaudière et la clim chaufferaient la même pièce
+simultanément.
 
 | Situation | Relais |
 |---|---|
 | Pièce sans radiateur | Clim, en toute saison |
-| Pièce avec radiateur et clim, extérieur ≥ seuil PAC, demande en cours | Clim |
+| Pièce avec radiateur et clim, appoint activé, extérieur ≥ seuil PAC, demande en cours | Clim |
 | Tous les autres cas | Radiateur |
 
-Quand une pièce est confiée à la clim, sa vanne retombe à la consigne
-d'absence et elle cesse de compter dans la demande chaudière.
-
-### Priorités de la clim
-
-| Priorité | Condition | Mode |
-|---|---|---|
-| 1 | Occupant présent, température > seuil de froid | Froid |
-| 2 | Pièce confiée à la clim par l'arbitrage | Chaud |
-| 3 | Occupant présent, humidité > seuil | Déshumidification |
-| 4 | Sinon | Arrêt |
+Une pièce confiée à la clim voit sa vanne retomber à la consigne d'absence et
+cesse de compter dans la demande chaudière.
 
 ### Quota Comfort Cloud
 
 Comfort Cloud est une API distante, lente et limitée en nombre d'appels. Une
 automatisation bavarde peut saturer le quota et faire tomber l'intégration en
-erreur. Deux garde-fous :
-
-- aucun ordre n'est envoyé si l'appareil est déjà dans l'état voulu ;
-- au maximum une commande toutes les 5 minutes par appareil.
-
-Le seuil `clim_seuil_pac` (5 °C par défaut) arbitre entre PAC et mazout. La
-bonne valeur dépend du prix réel de ton kWh électrique face au litre de
-mazout, et du COP de ta Panasonic par température extérieure — à affiner
-après un hiver d'observation.
+erreur. Deux garde-fous : aucun ordre n'est envoyé si l'appareil est déjà
+dans l'état voulu, et au maximum une commande toutes les 5 minutes par
+appareil.
 
 ## Tests
 
@@ -288,6 +326,5 @@ et la demande chaudière. À relancer après toute modification du bloc
 - Brancher les vrais identifiants d'entités (bloquant).
 - Décider de la source de présence : app Companion (GPS) pour automatiser
   les boutons, ou pilotage manuel.
-- Confirmer que « Lolo » désigne bien Laurent (hypothèse retenue pour
-  nommer les entités).
-- Affiner `clim_seuil_pac` avec les prix réels de l'électricité et du mazout.
+- Affiner `clim_seuil_pac` avec les prix réels de l'électricité et du mazout,
+  si tu actives un jour l'appoint chauffage.

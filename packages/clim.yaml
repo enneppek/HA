@@ -1,33 +1,102 @@
 ################################################################################
-# CLIMATISATION PANASONIC (Comfort Cloud)
+# CLIMATISATION PANASONIC (Comfort Cloud) — chambre de Lolo
 #
-# Trois rôles : rafraîchir l'été, servir d'appoint au chauffage quand la pompe
-# à chaleur est plus économique que le mazout, et déshumidifier.
+# Cette pièce n'a aucun radiateur : la clim y est l'unique source de chaleur.
+# Elle garantit donc deux choses, toutes deux réglables :
+#   - une température minimale       (input_number.clim_temp_min, 15 °C)
+#   - une humidité relative maximale (input_number.clim_seuil_humidite, 65 %)
+# mesurées sur la sonde d'ambiance Sonoff de la pièce.
 #
-# Comme pour le chauffage, la décision est calculée dans un capteur
-# (sensor.clim_pilotage) et l'automatisation ne fait que l'appliquer.
+# Hors de ces deux garanties, elle ne fait rien : le rafraîchissement et
+# l'appoint chauffage existent mais sont des interrupteurs désactivés.
+#
+# Dès qu'une consigne de température est posée à la main depuis Home Assistant,
+# l'automatisation s'efface et laisse la main, pour quelques heures.
 #
 # ATTENTION — Comfort Cloud est une API distante, lente et à quota. Toute
-# commande superflue rapproche du plafond et peut faire tomber l'intégration
+# commande superflue rapproche de la limite et peut faire tomber l'intégration
 # en erreur. D'où les garde-fous : on n'envoie un ordre que s'il diffère de
 # l'état courant, et jamais plus d'un toutes les 5 minutes par appareil.
 ################################################################################
 
 ################################################################################
 # 1. COMMANDES
+#
+# Aucun `initial:` volontairement : un redémarrage ne doit pas écraser ton
+# choix. Après la première installation, pense à activer Déshumidification.
 ################################################################################
 input_boolean:
-  clim_auto_froid:
-    name: "Clim - rafraîchissement automatique"
-    icon: mdi:snowflake
-  clim_auto_chaud:
-    name: "Clim - appoint chauffage"
-    icon: mdi:heat-pump
   clim_auto_deshu:
     name: "Clim - déshumidification"
     icon: mdi:water-percent
 
+  clim_auto_froid:
+    name: "Clim - rafraîchissement (désactivé par défaut)"
+    icon: mdi:snowflake
+
+  clim_auto_chaud:
+    name: "Clim - appoint chauffage (désactivé par défaut)"
+    icon: mdi:heat-pump
+
+  clim_maintien_temp_min:
+    name: "Clim - maintenir une température minimale"
+    icon: mdi:thermometer-chevron-down
+
+  clim_pilotage_manuel:
+    name: "Clim - pilotage manuel en cours"
+    icon: mdi:hand-back-right
+
 input_number:
+  clim_seuil_humidite:
+    name: "Clim - seuil de déshumidification"
+    icon: mdi:water-percent
+    min: 50
+    max: 80
+    step: 1
+    unit_of_measurement: "%"
+    initial: 65
+
+  clim_deshu_delta:
+    # Le mode chaud assèche en abaissant l'humidité relative. Viser un peu
+    # au-dessus de la température ambiante suffit : inutile de surchauffer.
+    name: "Clim - écart de chauffe pour assécher"
+    icon: mdi:thermometer-plus
+    min: 0.5
+    max: 5
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 1.5
+
+  clim_deshu_temp_max:
+    # Garde-fou : au-delà, on cesse d'assécher plutôt que de cuire la pièce.
+    name: "Clim - température maximale en assèchement"
+    icon: mdi:thermometer-alert
+    min: 18
+    max: 28
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 22
+
+  clim_temp_min:
+    # La chambre de Lolo n'a pas de radiateur : cette valeur est la seule
+    # chose qui empêche la pièce de suivre la température extérieure.
+    name: "Clim - température minimale maintenue"
+    icon: mdi:thermometer-chevron-down
+    min: 5
+    max: 20
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 15
+
+  clim_duree_manuel:
+    name: "Clim - durée de la main laissée"
+    icon: mdi:timer-sand
+    min: 30
+    max: 720
+    step: 30
+    unit_of_measurement: min
+    initial: 180
+
   clim_seuil_froid:
     name: "Clim - déclenchement du froid"
     icon: mdi:thermometer-high
@@ -47,9 +116,6 @@ input_number:
     initial: 25
 
   clim_seuil_pac:
-    # En dessous de ce seuil, le rendement de la PAC s'effondre et le mazout
-    # redevient compétitif. 5 °C est prudent ; à ajuster selon le coût réel
-    # du kWh électrique face au litre de mazout.
     name: "Clim - extérieur mini pour l'appoint"
     icon: mdi:thermometer-low
     min: -10
@@ -58,24 +124,21 @@ input_number:
     unit_of_measurement: "°C"
     initial: 5
 
-  clim_seuil_humidite:
-    name: "Clim - seuil de déshumidification"
-    icon: mdi:water-percent
-    min: 50
-    max: 80
-    step: 1
-    unit_of_measurement: "%"
-    initial: 65
-
 ################################################################################
 # 2. DÉCISION
 #
 # Priorité décroissante :
-#   1. Personne dans la pièce                     -> arrêt
-#   2. Trop chaud et rafraîchissement autorisé    -> froid
-#   3. Pièce désignée à la clim par l'arbitrage   -> chaud
-#   4. Trop humide et déshumidification autorisée -> déshumidification
+#   1. Sous la température minimale               -> chaud, jusqu'à ce minimum
+#   2. Rafraîchissement activé, occupant, trop chaud -> froid
+#   3. Appoint activé et pièce confiée à la clim  -> chaud, consigne du moment
+#   4. Trop humide                                -> chaud (assèchement)
 #   5. Sinon                                      -> arrêt
+#
+# L'assèchement passe par le mode CHAUD et non `dry` : sur cette Panasonic,
+# le mode chaud fait tomber l'humidité relative bien plus efficacement.
+# À noter qu'il l'abaisse en réchauffant l'air plutôt qu'en extrayant de
+# l'eau — ce qui est précisément ce qui compte contre la condensation et les
+# moisissures sur les parois froides.
 ################################################################################
 template:
   - sensor:
@@ -83,8 +146,12 @@ template:
         unique_id: clim_pilotage
         icon: mdi:air-conditioner
         state: >-
-          {% set o = state_attr('sensor.clim_pilotage', 'ordres') or {} %}
-          {{ o.values() | rejectattr('mode', 'eq', 'off') | list | count }}
+          {% if is_state('input_boolean.clim_pilotage_manuel', 'on') %}
+            manuel
+          {% else %}
+            {% set o = state_attr('sensor.clim_pilotage', 'ordres') or {} %}
+            {{ o.values() | rejectattr('mode', 'eq', 'off') | list | count }}
+          {% endif %}
         attributes:
           ordres: >-
             {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
@@ -93,8 +160,13 @@ template:
             {% set seuil_froid = states('input_number.clim_seuil_froid') | float(default=26) %}
             {% set consigne_ete = states('input_number.clim_consigne_ete') | float(default=25) %}
             {% set seuil_hum = states('input_number.clim_seuil_humidite') | float(default=65) %}
+            {% set delta = states('input_number.clim_deshu_delta') | float(default=1.5) %}
+            {% set temp_max = states('input_number.clim_deshu_temp_max') | float(default=22) %}
+            {% set temp_min = states('input_number.clim_temp_min') | float(default=15) %}
             {% set froid_ok = is_state('input_boolean.clim_auto_froid', 'on') %}
+            {% set chaud_ok = is_state('input_boolean.clim_auto_chaud', 'on') %}
             {% set deshu_ok = is_state('input_boolean.clim_auto_deshu', 'on') %}
+            {% set temp_min_ok = is_state('input_boolean.clim_maintien_temp_min', 'on') %}
             {% set ns = namespace(presents=[]) %}
             {% for q in ['leo', 'pablo', 'laurent'] %}
               {% if is_state('input_boolean.presence_' ~ q, 'on') %}
@@ -107,19 +179,21 @@ template:
               {% set mesure = states(c.sonde) | float(default=20) %}
               {% set humidite = states(c.humidite) | float(default=0) %}
               {% set cible = consignes.get(p, 15) | float(default=15) %}
-              {# L'arrêt n'est PAS conditionné à la présence : dans une pièce
-                 sans radiateur, couper la clim parce que personne n'est là
-                 supprimerait le hors-gel. La consigne vaut déjà 15 °C en
-                 l'absence d'occupant, donc chauffer jusqu'à `cible` suffit.
-                 Froid et déshumidification, eux, ne servent personne dans une
-                 pièce vide : ils restent conditionnés à la présence. #}
-              {% if occupe and froid_ok and mesure > seuil_froid %}
+              {# Hystérésis : une fois lancé, l'assèchement continue 5 points
+                 sous le seuil, faute de quoi la clim battrait sans cesse. #}
+              {% set en_cours = states(c.clim) == 'heat' %}
+              {% set assecher = deshu_ok and (humidite > seuil_hum
+                                or (en_cours and humidite > seuil_hum - 5)) %}
+              {% if temp_min_ok and mesure < temp_min %}
+                {% set ordre = {'mode': 'heat', 'temp': temp_min} %}
+              {% elif froid_ok and occupe and mesure > seuil_froid %}
                 {% set ordre = {'mode': 'cool', 'temp': consigne_ete} %}
-              {% elif relais.get(p, 'radiateur') == 'clim'
+              {% elif chaud_ok and relais.get(p, 'radiateur') == 'clim'
                       and mesure < (cible + 0.5) %}
                 {% set ordre = {'mode': 'heat', 'temp': cible} %}
-              {% elif occupe and deshu_ok and humidite > seuil_hum %}
-                {% set ordre = {'mode': 'dry', 'temp': 0} %}
+              {% elif assecher and mesure < temp_max %}
+                {% set ordre = {'mode': 'heat',
+                                'temp': [mesure + delta, temp_max] | min} %}
               {% else %}
                 {% set ordre = {'mode': 'off', 'temp': 0} %}
               {% endif %}
@@ -142,11 +216,16 @@ automation:
           - input_boolean.clim_auto_froid
           - input_boolean.clim_auto_chaud
           - input_boolean.clim_auto_deshu
-          - input_boolean.presence_leo
-          - input_boolean.presence_pablo
+          - input_boolean.clim_maintien_temp_min
+          - input_boolean.clim_pilotage_manuel
           - input_boolean.presence_laurent
       - platform: homeassistant
         event: start
+    condition:
+      # Tant que tu pilotes à la main, l'automatisation se tait.
+      - condition: state
+        entity_id: input_boolean.clim_pilotage_manuel
+        state: "off"
     action:
       - delay: "00:00:05"
       - repeat:
@@ -154,7 +233,6 @@ automation:
             {{ (state_attr('sensor.clim_pilotage', 'ordres') or {}) | list }}
           sequence:
             - variables:
-                piece: "{{ repeat.item }}"
                 clim: >-
                   {{ (state_attr('sensor.chauffage_configuration', 'pieces')
                       or {})[repeat.item].clim }}
@@ -162,7 +240,7 @@ automation:
                   {{ (state_attr('sensor.clim_pilotage', 'ordres')
                       or {})[repeat.item] }}
             # `if/then` et non `condition:` : une condition qui échoue
-            # interromprait la boucle entière.
+            # interromprait la boucle entière, pas la seule itération.
             - if:
                 - condition: template
                   value_template: >-
@@ -188,3 +266,42 @@ automation:
                     entity_id: "{{ clim }}"
                   data:
                     temperature: "{{ ordre.temp }}"
+
+  ##############################################################################
+  # Détection d'un réglage à la main.
+  #
+  # `context.user_id` n'est renseigné que si un humain a agi depuis Home
+  # Assistant. Une commande émise par une automatisation en est dépourvue,
+  # ce qui évite que le pilotage ne se prenne lui-même pour toi.
+  #
+  # Limite connue : un réglage fait depuis la télécommande infrarouge ou
+  # l'application Comfort Cloud n'a pas non plus de user_id, et passera donc
+  # inaperçu. Dans ce cas, active l'interrupteur de pilotage manuel toi-même.
+  ##############################################################################
+  - id: clim_detection_pilotage_manuel
+    alias: "Clim - détecter un réglage manuel"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: climate.clim_chambre_lolo
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.context.user_id is not none }}"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.clim_pilotage_manuel
+
+  - id: clim_fin_pilotage_manuel
+    alias: "Clim - rendre la main à l'automatisation"
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: input_boolean.clim_pilotage_manuel
+        to: "on"
+    action:
+      - delay:
+          minutes: "{{ states('input_number.clim_duree_manuel') | int(default=180) }}"
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.clim_pilotage_manuel

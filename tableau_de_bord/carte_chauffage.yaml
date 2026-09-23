@@ -123,22 +123,34 @@ cards:
       {% endfor %}
 
   # --- Climatisation -------------------------------------------------------
-  # La chambre de Lolo n'a pas de radiateur : la clim y est seule source de
-  # chaleur, et assure donc aussi le hors-gel.
+  # La chambre de Lolo n'a aucun radiateur : la clim y est l'unique source de
+  # chaleur. Elle garantit une température minimale et une humidité maximale.
   - type: entities
-    title: Climatisation
+    title: Chambre Lolo (clim seule)
     entities:
       - entity: climate.clim_chambre_lolo
-        name: Clim chambre Lolo
+        name: Climatisation
+      - entity: sensor.temperature_chambre_laurent
+        name: Température
       - entity: sensor.humidite_chambre_laurent
-        name: Humidité chambre Lolo
+        name: Humidité
       - type: divider
-      - entity: input_boolean.clim_auto_froid
-        name: Rafraîchissement
-      - entity: input_boolean.clim_auto_chaud
-        name: Appoint chauffage
       - entity: input_boolean.clim_auto_deshu
-        name: Déshumidification
+        name: Limiter l'humidité
+      - entity: input_number.clim_seuil_humidite
+        name: Humidité maximale
+      - type: divider
+      - entity: input_boolean.clim_maintien_temp_min
+        name: Maintenir une température minimale
+      - entity: input_number.clim_temp_min
+        name: Température minimale
+      - type: divider
+      - entity: input_boolean.clim_pilotage_manuel
+        name: Pilotage manuel en cours
+      - entity: input_boolean.clim_auto_froid
+        name: Rafraîchissement (optionnel)
+      - entity: input_boolean.clim_auto_chaud
+        name: Appoint chauffage (optionnel)
 
   - type: markdown
     content: >-
@@ -154,9 +166,14 @@ cards:
       {%- if ordre.temp %} à {{ ordre.temp }} °C{% endif %}
       {% endfor %}
 
-      Extérieur : {{ states('sensor.chauffage_temperature_exterieure') }} °C ·
-      Appoint rentable au-dessus de
-      {{ states('input_number.clim_seuil_pac') }} °C
+      {% if is_state('input_boolean.clim_pilotage_manuel', 'on') %}
+      ✋ **Pilotage manuel** — l'automatisation reprendra la main d'elle-même.
+      {% endif %}
+
+      Garanties : au moins
+      {{ states('input_number.clim_temp_min') }} °C,
+      au plus {{ states('input_number.clim_seuil_humidite') }} % d'humidité ·
+      Extérieur {{ states('sensor.chauffage_temperature_exterieure') }} °C
 
   # --- Réglages ------------------------------------------------------------
   - type: entities
@@ -175,5 +192,9 @@ cards:
         name: Consigne d'été
       - entity: input_number.clim_seuil_pac
         name: Extérieur mini pour l'appoint
-      - entity: input_number.clim_seuil_humidite
-        name: Seuil de déshumidification
+      - entity: input_number.clim_deshu_delta
+        name: Écart de chauffe pour assécher
+      - entity: input_number.clim_deshu_temp_max
+        name: Température max en assèchement
+      - entity: input_number.clim_duree_manuel
+        name: Durée de la main laissée
