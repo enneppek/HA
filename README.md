@@ -21,30 +21,69 @@ climatisation) piloté par la présence des occupants.
 ## Pourquoi le travail se fait en local
 
 Une session Claude Code hébergée dans le cloud ne peut pas joindre
-`192.168.129.248:8130` : elle tourne dans un conteneur isolé, sans route vers
+`192.168.129.248:8123` : elle tourne dans un conteneur isolé, sans route vers
 un LAN privé ni vers un tailnet. Les automatisations se développent donc
 depuis une machine du réseau local, qui elle a accès à l'instance.
 
 ### Mise en place sur une machine du LAN
 
-```bash
-# 1. Installer Claude Code (Linux / macOS)
-curl -fsSL https://claude.ai/install.sh | bash
-#    (alternative : npm install -g @anthropic-ai/claude-code)
+Claude Code s'installe en ligne de commande. Choisir l'onglet correspondant
+à son terminal.
 
-# 2. Cloner ce dépôt
+**Windows — Invite de commandes (cmd)**
+
+```bat
+curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+**Windows — PowerShell**
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+Repère : l'invite affiche `PS C:\>` en PowerShell, et `C:\>` sans le `PS`
+en cmd. Si `irm` renvoie « n'est pas reconnu », c'est qu'on est en cmd ;
+si `&&` renvoie « n'est pas un séparateur d'instruction valide », c'est
+qu'on est en PowerShell.
+
+Sur Windows, installer aussi [Git pour Windows](https://git-scm.com/downloads/win) :
+il fournit `git` et permet à Claude Code d'utiliser bash plutôt que PowerShell.
+
+**macOS / Linux**
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Vérifier ensuite l'installation :
+
+```bash
+claude --version
+```
+
+**Puis, dans tous les cas :**
+
+```bash
 git clone https://github.com/enneppek/ha.git
 cd ha
 git checkout claude/home-assistant-automation-a404kg
-
-# 3. Créer un jeton d'accès longue durée dans Home Assistant :
-#    Profil (en bas à gauche) > Sécurité > Jetons d'accès longue durée
-#    > Créer un jeton. Le copier immédiatement, il ne sera plus affiché.
-cp .env.exemple .env
-$EDITOR .env          # y coller l'URL et le jeton
-
-# 4. Lancer Claude Code depuis le dépôt
 claude
+```
+
+Au premier lancement, Claude Code demande de se connecter via le navigateur.
+
+### Jeton d'accès Home Assistant
+
+Ne jamais utiliser son mot de passe HA. Créer un jeton, qui se révoque d'un
+clic sans toucher au compte :
+
+Profil (en bas à gauche) > Sécurité > Jetons d'accès longue durée > Créer.
+Le copier immédiatement, il n'est plus affiché ensuite.
+
+```bash
+cp .env.exemple .env
+# puis éditer .env pour y coller l'URL et le jeton
 ```
 
 `.env` est ignoré par git : le jeton ne doit jamais être committé.
@@ -53,9 +92,13 @@ claude
 
 ```bash
 set -a && . ./.env && set +a
-curl -s -H "Authorization: Bearer $HA_TOKEN" "$HA_URL/api/" 
+curl -s -H "Authorization: Bearer $HA_TOKEN" "$HA_URL/api/"
 # Réponse attendue : {"message":"API running."}
 ```
+
+Un **timeout** signale un problème de route réseau (mauvaise IP, mauvais
+port, machine hors du LAN). Un **401** signale un jeton invalide : la
+connexion, elle, fonctionne.
 
 ## Inventaire des entités
 
