@@ -46,7 +46,7 @@ class Monde:
         'input_number.clim_deshu_delta': 1.5,
         'input_number.clim_deshu_temp_max': 22,
         'input_number.clim_temp_min': 15,
-        'input_number.chaudiere_consigne_marche': 26,
+        'input_number.chaudiere_consigne_marche': 24,
         'input_number.chaudiere_consigne_arret': 10,
     }
 
@@ -163,6 +163,37 @@ def titre(t):
 
 
 # =============================================================================
+titre("Syntaxe de tous les templates")
+# Une erreur de syntaxe Jinja laisse le YAML valide : seul le rendu échoue,
+# et Home Assistant se contente alors d'un capteur « unavailable ». Ce contrôle
+# compile chaque template des deux packages, y compris ceux qu'aucun scénario
+# ci-dessous n'exerce.
+
+
+def templates(noeud, chemin="") :
+    """Parcourt le YAML et rend chaque chaîne contenant du Jinja."""
+    if isinstance(noeud, dict):
+        for cle, valeur in noeud.items():
+            yield from templates(valeur, f"{chemin}.{cle}")
+    elif isinstance(noeud, list):
+        for i, valeur in enumerate(noeud):
+            yield from templates(valeur, f"{chemin}[{i}]")
+    elif isinstance(noeud, str) and ('{{' in noeud or '{%' in noeud):
+        yield chemin, noeud
+
+
+erreurs = 0
+for nom, paquet in (('chauffage', chauffage), ('clim', clim_pkg)):
+    for chemin, tpl in templates(paquet, nom):
+        try:
+            Environment().parse(tpl)
+        except Exception as e:
+            erreurs += 1
+            echecs.append(chemin)
+            print(f"  {ROUGE}ÉCHEC{RAZ} {chemin}")
+            print(f"         {e}")
+verifier("tous les templates compilent", erreurs, 0)
+
 titre("Parité des semaines")
 m = evaluer(Monde(presents=['laurent'], semaine=40))
 verifier("semaine paire : chambre Léo à 15°", m.consignes['chambre_leo'], 15.0)
@@ -270,17 +301,15 @@ titre("Chaudière — le T6 n'est plus qu'un relais")
 # Le T6 est dans la cuisine. Le scénario qui cassait l'installation : cuisine
 # à bonne température, chambre d'enfant glaciale. Le brûleur doit tourner.
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
-                  temps={'sensor.temperature_cuisine': 24.0,
+                  temps={'sensor.temperature_cuisine': 22.0,
                          'sensor.temperature_salon': 21.0,
                          'sensor.temperature_chambre_leo': 16.0,
                          'sensor.temperature_chambre_pablo': 16.0,
                          'sensor.temperature_sdb_enfants': 21.0}))
-verifier("cuisine chaude mais chambres froides -> demande maintenue",
+verifier("cuisine à 22° mais chambres froides -> demande maintenue",
          rendre(TPL_DEMANDE, m), 'True')
 verifier("  -> consigne d'appel envoyée au T6",
-         rendre(TPL_CHAUDIERE, m), '26.0')
-verifier("  -> au-dessus de la cuisine, le T6 ne peut pas se satisfaire",
-         float(rendre(TPL_CHAUDIERE, m)) > 24.0, True)
+         rendre(TPL_CHAUDIERE, m), '24.0')
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
                   temps={'sensor.temperature_cuisine': 21.0,

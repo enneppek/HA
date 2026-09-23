@@ -139,9 +139,13 @@ homeassistant:
 | Chambre Pablo | 1 | Pablo | 19,5 / 17 / 15 |
 | Salle de bains enfants | 1 | Léo, Pablo | 21 / 18 / 15 |
 | Chambre Lolo | **aucune** — clim seule | Lolo | 19,5 / 17 / 15 |
-| Boulangerie | 1 | Lolo | 19 / 16 / 15 |
+| Boulangerie | 1 (+ poêle à bois) | Lolo | 19 / 16 / 15 |
 | Cuisine | 2 | tous | 19 / 16,5 / 15 |
 | Salon | 2 | tous | 20,5 / 17,5 / 15 |
+
+La boulangerie dispose en plus d'un **poêle à bois**. Aucun traitement
+particulier n'est nécessaire : quand le poêle tourne, la pièce dépasse sa
+consigne, cesse de réclamer, et sa vanne se ferme d'elle-même.
 
 Une pièce peut porter plusieurs vannes : elles reçoivent toutes la même
 consigne. Les pièces communes se déclenchent dès qu'une personne est
@@ -265,18 +269,22 @@ Le T6 n'est donc plus un thermostat, mais un interrupteur :
 
 | Demande de Home Assistant | Consigne envoyée au T6 | Effet |
 |---|---|---|
-| Une pièce au moins réclame | `chaudiere_consigne_marche` (26 °C) | Le T6 ne peut être satisfait, le brûleur tourne |
+| Une pièce au moins réclame | `chaudiere_consigne_marche` (24 °C) | Le T6 ne peut être satisfait, le brûleur tourne |
 | Aucune pièce ne réclame | `chaudiere_consigne_arret` (10 °C) | Le T6 relâche, le brûleur s'arrête |
 
 Ce sont les vannes, pièce par pièce, qui règlent réellement les températures.
 Le T6 ne fait plus qu'ouvrir et fermer le robinet d'eau chaude.
 
-**Pourquoi 26 °C et non 30 °C.** Si Home Assistant tombe en panne, le T6
-reste figé sur sa dernière consigne. Cette valeur borne alors la température
-de la cuisine : à 30 °C elle deviendrait invivable, à 26 °C elle est
-seulement chaude. C'est le compromis entre « toujours appeler » et « échouer
-sans dégât ». Si ta cuisine dépasse régulièrement 26 °C en cuisinant, relève
-la consigne d'appel — c'est exactement à quoi sert le réglage.
+**Pourquoi 24 °C et non le maximum.** Si Home Assistant tombe en panne, le
+T6 reste figé sur sa dernière consigne, et cette valeur borne alors la
+température de la cuisine : à 30 °C elle deviendrait invivable. C'est le
+compromis entre « toujours appeler » et « échouer sans dégât ».
+
+24 °C laisse environ 5 °C de marge au-dessus de la consigne de la cuisine.
+Contrepartie à surveiller : une cuisson qui pousse la pièce au-delà de 24 °C
+fera relâcher le brûleur le temps qu'elle redescende. Si cela arrive souvent
+en hiver, relève la consigne d'appel — c'est exactement à quoi sert le
+réglage.
 
 **À corriger sur place :** remets les vannes de la cuisine en régulation
 normale. Leur réglage à 30 °C était un contournement du problème ; une fois

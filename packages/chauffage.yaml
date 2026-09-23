@@ -23,6 +23,9 @@ template:
              if state_attr('sensor.chauffage_configuration', 'pieces') else 5 }}
         attributes:
           pieces: >-
+            {# La boulangerie a en plus un poêle à bois. Rien de particulier à
+               prévoir : quand il tourne, la pièce dépasse sa consigne, cesse
+               de réclamer, et sa vanne se ferme d'elle-même. #}
             {{
               {
                 'chambre_leo': {
@@ -254,7 +257,7 @@ template:
         unit_of_measurement: "°C"
         device_class: temperature
         state: >-
-          {{ states('input_number.chaudiere_consigne_marche') | float(default=26)
+          {{ states('input_number.chaudiere_consigne_marche') | float(default=24)
              if is_state('binary_sensor.chauffage_demande_chaudiere', 'on')
              else states('input_number.chaudiere_consigne_arret') | float(default=10) }}
 
@@ -344,7 +347,11 @@ input_number:
   # Consigne de marche : assez haute pour que le T6 réclame toujours quand
   # HA le veut, mais PAS au maximum. Si Home Assistant tombe en panne, le T6
   # reste sur cette valeur : elle borne alors la température de la cuisine.
-  # 30 °C rendrait la cuisine invivable, 26 °C la rend seulement chaude.
+  #
+  # 24 °C laisse environ 5 °C de marge au-dessus de la consigne de la cuisine.
+  # Contrepartie : une cuisson qui pousse la pièce au-delà de 24 °C fera
+  # relâcher le brûleur le temps qu'elle redescende. Si cela se produit
+  # souvent, relever cette valeur.
   chaudiere_consigne_marche:
     name: "Chaudière - consigne d'appel"
     icon: mdi:fire
@@ -352,7 +359,7 @@ input_number:
     max: 32
     step: 0.5
     unit_of_measurement: "°C"
-    initial: 26
+    initial: 24
 
   chaudiere_consigne_arret:
     name: "Chaudière - consigne de repos"
