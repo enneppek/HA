@@ -30,6 +30,8 @@ template:
                   'vanne': 'climate.vanne_chambre_leo',
                   'sonde': 'sensor.temperature_chambre_leo',
                   'occupants': ['leo'],
+                  'clim': none,
+                  'humidite': 'sensor.humidite_chambre_leo',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
                 'chambre_pablo': {
@@ -37,6 +39,8 @@ template:
                   'vanne': 'climate.vanne_chambre_pablo',
                   'sonde': 'sensor.temperature_chambre_pablo',
                   'occupants': ['pablo'],
+                  'clim': none,
+                  'humidite': 'sensor.humidite_chambre_pablo',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
                 'sdb_enfants': {
@@ -44,13 +48,17 @@ template:
                   'vanne': 'climate.vanne_sdb_enfants',
                   'sonde': 'sensor.temperature_sdb_enfants',
                   'occupants': ['leo', 'pablo'],
+                  'clim': none,
+                  'humidite': 'sensor.humidite_sdb_enfants',
                   'confort': 21.0, 'nuit': 18.0, 'absence': 15.0
                 },
                 'chambre_laurent': {
-                  'nom': 'Chambre Laurent',
-                  'vanne': 'climate.vanne_chambre_laurent',
+                  'nom': 'Chambre Lolo',
+                  'vanne': none,
                   'sonde': 'sensor.temperature_chambre_laurent',
                   'occupants': ['laurent'],
+                  'clim': 'climate.clim_chambre_lolo',
+                  'humidite': 'sensor.humidite_chambre_laurent',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
                 'sejour': {
@@ -58,6 +66,8 @@ template:
                   'vanne': 'climate.vanne_sejour',
                   'sonde': 'sensor.temperature_sejour',
                   'occupants': ['laurent'],
+                  'clim': none,
+                  'humidite': 'sensor.humidite_sejour',
                   'confort': 20.5, 'nuit': 17.5, 'absence': 15.0
                 }
               }
@@ -118,7 +128,66 @@ template:
           semaine_paire: "{{ now().isocalendar()[1] % 2 == 0 }}"
 
   ##############################################################################
-  # 3. DEMANDE CHAUDIÈRE
+  # 3. TEMPÉRATURE EXTÉRIEURE
+  # Arbitre le recours à la clim en chauffage : une pompe à chaleur perd son
+  # avantage sur le mazout quand il gèle. Repli sur l'entité météo si aucune
+  # sonde extérieure n'est disponible.
+  ##############################################################################
+  - sensor:
+      - name: "Chauffage température extérieure"
+        unique_id: chauffage_temperature_exterieure
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >-
+          {% set sonde = states('sensor.temperature_exterieure') %}
+          {% if sonde not in ['unknown', 'unavailable', 'none', ''] %}
+            {{ sonde | float(default=10) }}
+          {% else %}
+            {{ state_attr('weather.forecast_maison', 'temperature')
+               | float(default=10) }}
+          {% endif %}
+
+  ##############################################################################
+  # 4. ARBITRAGE — qui délivre la chaleur dans chaque pièce ?
+  #
+  # Règle : la clim ne prend une pièce en charge que si elle y est installée,
+  # que l'appoint est autorisé, qu'il ne fait pas trop froid dehors pour que
+  # la PAC reste rentable, et que la pièce réclame effectivement.
+  # Sinon, radiateur. Deux sources de chaleur simultanées gaspilleraient.
+  ##############################################################################
+  - sensor:
+      - name: "Chauffage relais"
+        unique_id: chauffage_relais
+        icon: mdi:call-split
+        state: >-
+          {% set r = state_attr('sensor.chauffage_relais', 'relais') or {} %}
+          {{ r.values() | select('eq', 'clim') | list | count }}
+        attributes:
+          relais: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+            {% set text = states('sensor.chauffage_temperature_exterieure')
+                          | float(default=10) %}
+            {% set seuil = states('input_number.clim_seuil_pac') | float(default=5) %}
+            {% set autorise = is_state('input_boolean.clim_auto_chaud', 'on') %}
+            {% set nd = namespace(d={}) %}
+            {% for p, c in cfg.items() %}
+              {% set mesure = states(c.sonde) | float(default=99) %}
+              {% set cible = consignes.get(p, 0) | float(default=0) %}
+              {% set demande = mesure < (cible - 0.3) %}
+              {# Sans radiateur, la clim assure la pièce en toute saison :
+                 le seuil de rentabilité de la PAC ne s'applique pas, il n'y a
+                 pas d'alternative. #}
+              {% set sans_radiateur = not c.vanne %}
+              {% set v = 'clim' if (c.clim and (sans_radiateur
+                                    or (autorise and text >= seuil and demande)))
+                         else 'radiateur' %}
+              {% set nd.d = dict(nd.d.items() | list + [(p, v)]) %}
+            {% endfor %}
+            {{ nd.d }}
+
+  ##############################################################################
+  # 5. DEMANDE CHAUDIÈRE
   # Vrai dès qu'une pièce accuse un déficit > 0.3 °C. Le delay_off de 10 min
   # évite que la chaudière ne cycle en courts créneaux.
   ##############################################################################
@@ -130,11 +199,15 @@ template:
         state: >-
           {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
           {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+          {% set relais = state_attr('sensor.chauffage_relais', 'relais') or {} %}
           {% set ns = namespace(demande=false) %}
           {% for p, c in cfg.items() %}
             {% set mesure = states(c.sonde) | float(default=99) %}
             {% set cible = consignes.get(p, 0) | float(default=0) %}
-            {% if mesure < (cible - 0.3) %}{% set ns.demande = true %}{% endif %}
+            {% if mesure < (cible - 0.3)
+                  and relais.get(p, 'radiateur') == 'radiateur' %}
+              {% set ns.demande = true %}
+            {% endif %}
           {% endfor %}
           {{ ns.demande }}
         attributes:
@@ -150,7 +223,7 @@ template:
             {{ ns.d | round(1) }}
 
 ################################################################################
-# 4. HORAIRE — semaines impaires et présence
+# 6. HORAIRE — semaines impaires et présence
 # Modifiable ensuite dans l'interface : Paramètres > Appareils et services >
 # Entrées > Planifications.
 ################################################################################
@@ -179,7 +252,7 @@ schedule:
         to: "22:00:00"
 
 ################################################################################
-# 5. COMMANDES — présence, confort par pièce, mode de garde
+# 7. COMMANDES — présence, confort par pièce, mode de garde
 ################################################################################
 input_boolean:
   presence_leo:
@@ -229,7 +302,7 @@ input_number:
     initial: 120
 
 ################################################################################
-# 6. AUTOMATISATIONS
+# 8. AUTOMATISATIONS
 ################################################################################
 automation:
   ##############################################################################
@@ -268,31 +341,46 @@ automation:
                 cfg: >-
                   {{ (state_attr('sensor.chauffage_configuration', 'pieces')
                       or {})[repeat.item] }}
+                relais: >-
+                  {{ (state_attr('sensor.chauffage_relais', 'relais')
+                      or {}).get(repeat.item, 'radiateur') }}
                 cible: >-
-                  {{ (state_attr('sensor.chauffage_consignes', 'consignes')
-                      or {}).get(repeat.item, 15) | float(default=15) }}
-            - condition: template
-              value_template: >-
-                {{ states(cfg.vanne) not in ['unknown', 'unavailable'] }}
-            # La vanne doit chauffer : 15° tient lieu de hors-gel.
+                  {% set c = (state_attr('sensor.chauffage_consignes', 'consignes')
+                              or {}).get(repeat.item, 15) | float(default=15) %}
+                  {% set cfg = (state_attr('sensor.chauffage_configuration', 'pieces')
+                                or {})[repeat.item] %}
+                  {# Si la clim chauffe la pièce, la vanne se referme pour ne pas
+                     faire tourner la chaudière en double. #}
+                  {{ cfg.absence | float(default=15)
+                     if (state_attr('sensor.chauffage_relais', 'relais')
+                         or {}).get(repeat.item, 'radiateur') == 'clim'
+                     else c }}
+            # Un `condition:` ici interromprait TOUTE la boucle, pas la seule
+            # itération : les pièces suivantes ne seraient jamais pilotées.
+            # D'où l'usage exclusif de `if/then`.
             - if:
                 - condition: template
-                  value_template: "{{ states(cfg.vanne) == 'off' }}"
+                  value_template: >-
+                    {{ cfg.vanne
+                       and states(cfg.vanne) not in ['unknown', 'unavailable']
+                       and (state_attr(cfg.vanne, 'temperature')
+                            | float(default=-99) - cible) | abs > 0.2 }}
               then:
-                - service: climate.set_hvac_mode
+                # La vanne doit chauffer : 15° tient lieu de hors-gel.
+                - if:
+                    - condition: template
+                      value_template: "{{ states(cfg.vanne) == 'off' }}"
+                  then:
+                    - service: climate.set_hvac_mode
+                      target:
+                        entity_id: "{{ cfg.vanne }}"
+                      data:
+                        hvac_mode: heat
+                - service: climate.set_temperature
                   target:
                     entity_id: "{{ cfg.vanne }}"
                   data:
-                    hvac_mode: heat
-            - condition: template
-              value_template: >-
-                {{ (state_attr(cfg.vanne, 'temperature') | float(default=-99)
-                    - cible) | abs > 0.2 }}
-            - service: climate.set_temperature
-              target:
-                entity_id: "{{ cfg.vanne }}"
-              data:
-                temperature: "{{ cible }}"
+                    temperature: "{{ cible }}"
 
   ##############################################################################
   # Bascule de garde selon la parité de semaine.

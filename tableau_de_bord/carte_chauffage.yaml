@@ -80,7 +80,7 @@ cards:
           action: toggle
       - type: button
         entity: input_boolean.confort_chambre_laurent
-        name: Chambre Laurent
+        name: Chambre Lolo
         icon: mdi:bed
         tap_action:
           action: toggle
@@ -103,7 +103,7 @@ cards:
       - entity: sensor.temperature_sdb_enfants
         name: SdB enfants
       - entity: sensor.temperature_chambre_laurent
-        name: Chambre Laurent
+        name: Chambre Lolo
       - entity: sensor.temperature_sejour
         name: Séjour
       - type: divider
@@ -122,6 +122,42 @@ cards:
       (mesure {{ states(cfg[piece].sonde) }} °C)
       {% endfor %}
 
+  # --- Climatisation -------------------------------------------------------
+  # La chambre de Lolo n'a pas de radiateur : la clim y est seule source de
+  # chaleur, et assure donc aussi le hors-gel.
+  - type: entities
+    title: Climatisation
+    entities:
+      - entity: climate.clim_chambre_lolo
+        name: Clim chambre Lolo
+      - entity: sensor.humidite_chambre_laurent
+        name: Humidité chambre Lolo
+      - type: divider
+      - entity: input_boolean.clim_auto_froid
+        name: Rafraîchissement
+      - entity: input_boolean.clim_auto_chaud
+        name: Appoint chauffage
+      - entity: input_boolean.clim_auto_deshu
+        name: Déshumidification
+
+  - type: markdown
+    content: >-
+      **Clim — décision en cours**
+
+      {% set o = state_attr('sensor.clim_pilotage', 'ordres') or {} %}
+      {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+      {% set r = state_attr('sensor.chauffage_relais', 'relais') or {} %}
+      {% for piece, ordre in o.items() %}
+      - {{ cfg[piece].nom }} :
+      **{{ {'cool': 'froid', 'heat': 'chaud', 'dry': 'déshumidification',
+            'off': 'arrêt'}.get(ordre.mode, ordre.mode) }}**
+      {%- if ordre.temp %} à {{ ordre.temp }} °C{% endif %}
+      {% endfor %}
+
+      Extérieur : {{ states('sensor.chauffage_temperature_exterieure') }} °C ·
+      Appoint rentable au-dessus de
+      {{ states('input_number.clim_seuil_pac') }} °C
+
   # --- Réglages ------------------------------------------------------------
   - type: entities
     title: Réglages
@@ -132,3 +168,12 @@ cards:
         name: Durée d'un appui confort
       - entity: schedule.chauffage
         name: Horaire
+      - type: divider
+      - entity: input_number.clim_seuil_froid
+        name: Déclenchement du froid
+      - entity: input_number.clim_consigne_ete
+        name: Consigne d'été
+      - entity: input_number.clim_seuil_pac
+        name: Extérieur mini pour l'appoint
+      - entity: input_number.clim_seuil_humidite
+        name: Seuil de déshumidification

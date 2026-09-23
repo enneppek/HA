@@ -110,7 +110,8 @@ résultat dans `inventaire.md`.
 ## Structure
 
 ```
-packages/chauffage.yaml            Logique de chauffage (à déployer dans HA)
+packages/chauffage.yaml            Chauffage : consignes, arbitrage, chaudière
+packages/clim.yaml                 Climatisation Panasonic
 tableau_de_bord/carte_chauffage.yaml  Carte Lovelace
 outils/export_entites.jinja        Modèle d'export des entités
 outils/test_logique.py             Banc d'essai de la logique
@@ -218,6 +219,57 @@ de 0,3 °C et retombe avec 10 minutes de retard (`delay_off`), pour éviter
 que la chaudière ne s'allume et s'éteigne en rafale. À ajuster selon
 l'inertie réelle de l'installation.
 
+## Climatisation Panasonic
+
+La clim est dans la **chambre de Lolo, qui n'a pas de radiateur**. Elle y est
+donc l'unique source de chaleur, ce qui a deux conséquences dans la logique :
+
+- le seuil de rentabilité de la pompe à chaleur ne s'y applique pas — par
+  grand froid la clim chauffe quand même, faute d'alternative ;
+- elle ne s'arrête pas quand la pièce est vide, sinon le hors-gel
+  disparaîtrait. La consigne vaut alors 15 °C, comme pour un radiateur.
+
+Rafraîchissement et déshumidification, eux, restent conditionnés à la
+présence : refroidir une pièce vide ne sert personne.
+
+### Arbitrage
+
+`sensor.chauffage_relais` désigne, pour chaque pièce, qui délivre la chaleur.
+Sans cet arbitrage, la chaudière et la clim chaufferaient la même pièce en
+même temps.
+
+| Situation | Relais |
+|---|---|
+| Pièce sans radiateur | Clim, en toute saison |
+| Pièce avec radiateur et clim, extérieur ≥ seuil PAC, demande en cours | Clim |
+| Tous les autres cas | Radiateur |
+
+Quand une pièce est confiée à la clim, sa vanne retombe à la consigne
+d'absence et elle cesse de compter dans la demande chaudière.
+
+### Priorités de la clim
+
+| Priorité | Condition | Mode |
+|---|---|---|
+| 1 | Occupant présent, température > seuil de froid | Froid |
+| 2 | Pièce confiée à la clim par l'arbitrage | Chaud |
+| 3 | Occupant présent, humidité > seuil | Déshumidification |
+| 4 | Sinon | Arrêt |
+
+### Quota Comfort Cloud
+
+Comfort Cloud est une API distante, lente et limitée en nombre d'appels. Une
+automatisation bavarde peut saturer le quota et faire tomber l'intégration en
+erreur. Deux garde-fous :
+
+- aucun ordre n'est envoyé si l'appareil est déjà dans l'état voulu ;
+- au maximum une commande toutes les 5 minutes par appareil.
+
+Le seuil `clim_seuil_pac` (5 °C par défaut) arbitre entre PAC et mazout. La
+bonne valeur dépend du prix réel de ton kWh électrique face au litre de
+mazout, et du COP de ta Panasonic par température extérieure — à affiner
+après un hiver d'observation.
+
 ## Tests
 
 La logique de calcul des consignes est vérifiable hors instance :
@@ -236,5 +288,6 @@ et la demande chaudière. À relancer après toute modification du bloc
 - Brancher les vrais identifiants d'entités (bloquant).
 - Décider de la source de présence : app Companion (GPS) pour automatiser
   les boutons, ou pilotage manuel.
-- Intégrer la clim Panasonic (Comfort Cloud), non traitée à ce stade :
-  appoint en chauffage, ou rafraîchissement l'été.
+- Confirmer que « Lolo » désigne bien Laurent (hypothèse retenue pour
+  nommer les entités).
+- Affiner `clim_seuil_pac` avec les prix réels de l'électricité et du mazout.

@@ -1,0 +1,190 @@
+################################################################################
+# CLIMATISATION PANASONIC (Comfort Cloud)
+#
+# Trois rôles : rafraîchir l'été, servir d'appoint au chauffage quand la pompe
+# à chaleur est plus économique que le mazout, et déshumidifier.
+#
+# Comme pour le chauffage, la décision est calculée dans un capteur
+# (sensor.clim_pilotage) et l'automatisation ne fait que l'appliquer.
+#
+# ATTENTION — Comfort Cloud est une API distante, lente et à quota. Toute
+# commande superflue rapproche du plafond et peut faire tomber l'intégration
+# en erreur. D'où les garde-fous : on n'envoie un ordre que s'il diffère de
+# l'état courant, et jamais plus d'un toutes les 5 minutes par appareil.
+################################################################################
+
+################################################################################
+# 1. COMMANDES
+################################################################################
+input_boolean:
+  clim_auto_froid:
+    name: "Clim - rafraîchissement automatique"
+    icon: mdi:snowflake
+  clim_auto_chaud:
+    name: "Clim - appoint chauffage"
+    icon: mdi:heat-pump
+  clim_auto_deshu:
+    name: "Clim - déshumidification"
+    icon: mdi:water-percent
+
+input_number:
+  clim_seuil_froid:
+    name: "Clim - déclenchement du froid"
+    icon: mdi:thermometer-high
+    min: 22
+    max: 32
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 26
+
+  clim_consigne_ete:
+    name: "Clim - consigne d'été"
+    icon: mdi:snowflake-thermometer
+    min: 20
+    max: 28
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 25
+
+  clim_seuil_pac:
+    # En dessous de ce seuil, le rendement de la PAC s'effondre et le mazout
+    # redevient compétitif. 5 °C est prudent ; à ajuster selon le coût réel
+    # du kWh électrique face au litre de mazout.
+    name: "Clim - extérieur mini pour l'appoint"
+    icon: mdi:thermometer-low
+    min: -10
+    max: 15
+    step: 1
+    unit_of_measurement: "°C"
+    initial: 5
+
+  clim_seuil_humidite:
+    name: "Clim - seuil de déshumidification"
+    icon: mdi:water-percent
+    min: 50
+    max: 80
+    step: 1
+    unit_of_measurement: "%"
+    initial: 65
+
+################################################################################
+# 2. DÉCISION
+#
+# Priorité décroissante :
+#   1. Personne dans la pièce                     -> arrêt
+#   2. Trop chaud et rafraîchissement autorisé    -> froid
+#   3. Pièce désignée à la clim par l'arbitrage   -> chaud
+#   4. Trop humide et déshumidification autorisée -> déshumidification
+#   5. Sinon                                      -> arrêt
+################################################################################
+template:
+  - sensor:
+      - name: "Clim pilotage"
+        unique_id: clim_pilotage
+        icon: mdi:air-conditioner
+        state: >-
+          {% set o = state_attr('sensor.clim_pilotage', 'ordres') or {} %}
+          {{ o.values() | rejectattr('mode', 'eq', 'off') | list | count }}
+        attributes:
+          ordres: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+            {% set relais = state_attr('sensor.chauffage_relais', 'relais') or {} %}
+            {% set seuil_froid = states('input_number.clim_seuil_froid') | float(default=26) %}
+            {% set consigne_ete = states('input_number.clim_consigne_ete') | float(default=25) %}
+            {% set seuil_hum = states('input_number.clim_seuil_humidite') | float(default=65) %}
+            {% set froid_ok = is_state('input_boolean.clim_auto_froid', 'on') %}
+            {% set deshu_ok = is_state('input_boolean.clim_auto_deshu', 'on') %}
+            {% set ns = namespace(presents=[]) %}
+            {% for q in ['leo', 'pablo', 'laurent'] %}
+              {% if is_state('input_boolean.presence_' ~ q, 'on') %}
+                {% set ns.presents = ns.presents + [q] %}
+              {% endif %}
+            {% endfor %}
+            {% set nd = namespace(d={}) %}
+            {% for p, c in cfg.items() if c.clim %}
+              {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
+              {% set mesure = states(c.sonde) | float(default=20) %}
+              {% set humidite = states(c.humidite) | float(default=0) %}
+              {% set cible = consignes.get(p, 15) | float(default=15) %}
+              {# L'arrêt n'est PAS conditionné à la présence : dans une pièce
+                 sans radiateur, couper la clim parce que personne n'est là
+                 supprimerait le hors-gel. La consigne vaut déjà 15 °C en
+                 l'absence d'occupant, donc chauffer jusqu'à `cible` suffit.
+                 Froid et déshumidification, eux, ne servent personne dans une
+                 pièce vide : ils restent conditionnés à la présence. #}
+              {% if occupe and froid_ok and mesure > seuil_froid %}
+                {% set ordre = {'mode': 'cool', 'temp': consigne_ete} %}
+              {% elif relais.get(p, 'radiateur') == 'clim'
+                      and mesure < (cible + 0.5) %}
+                {% set ordre = {'mode': 'heat', 'temp': cible} %}
+              {% elif occupe and deshu_ok and humidite > seuil_hum %}
+                {% set ordre = {'mode': 'dry', 'temp': 0} %}
+              {% else %}
+                {% set ordre = {'mode': 'off', 'temp': 0} %}
+              {% endif %}
+              {% set nd.d = dict(nd.d.items() | list + [(p, ordre)]) %}
+            {% endfor %}
+            {{ nd.d }}
+
+################################################################################
+# 3. APPLICATION
+################################################################################
+automation:
+  - id: clim_pilotage_automatique
+    alias: "Clim - pilotage automatique"
+    mode: single
+    trigger:
+      - platform: time_pattern
+        minutes: "/5"
+      - platform: state
+        entity_id:
+          - input_boolean.clim_auto_froid
+          - input_boolean.clim_auto_chaud
+          - input_boolean.clim_auto_deshu
+          - input_boolean.presence_leo
+          - input_boolean.presence_pablo
+          - input_boolean.presence_laurent
+      - platform: homeassistant
+        event: start
+    action:
+      - delay: "00:00:05"
+      - repeat:
+          for_each: >-
+            {{ (state_attr('sensor.clim_pilotage', 'ordres') or {}) | list }}
+          sequence:
+            - variables:
+                piece: "{{ repeat.item }}"
+                clim: >-
+                  {{ (state_attr('sensor.chauffage_configuration', 'pieces')
+                      or {})[repeat.item].clim }}
+                ordre: >-
+                  {{ (state_attr('sensor.clim_pilotage', 'ordres')
+                      or {})[repeat.item] }}
+            # `if/then` et non `condition:` : une condition qui échoue
+            # interromprait la boucle entière.
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ states(clim) not in ['unknown', 'unavailable']
+                       and states(clim) != ordre.mode
+                       and (now() - states[clim].last_changed).total_seconds() > 300 }}
+              then:
+                - service: climate.set_hvac_mode
+                  target:
+                    entity_id: "{{ clim }}"
+                  data:
+                    hvac_mode: "{{ ordre.mode }}"
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ ordre.mode in ['cool', 'heat']
+                       and states(clim) not in ['unknown', 'unavailable']
+                       and (state_attr(clim, 'temperature') | float(default=-99)
+                            - ordre.temp | float) | abs > 0.4 }}
+              then:
+                - service: climate.set_temperature
+                  target:
+                    entity_id: "{{ clim }}"
+                  data:
+                    temperature: "{{ ordre.temp }}"
