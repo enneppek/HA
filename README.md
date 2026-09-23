@@ -139,6 +139,7 @@ homeassistant:
 | Chambre Pablo | 1 | Pablo | 19,5 / 17 / 15 |
 | Salle de bains enfants | 1 | Léo, Pablo | 21 / 18 / 15 |
 | Chambre Lolo | **aucune** — clim seule | Lolo | 19,5 / 17 / 15 |
+| Boulangerie | 1 | Lolo | 19 / 16 / 15 |
 | Cuisine | 2 | tous | 19 / 16,5 / 15 |
 | Salon | 2 | tous | 20,5 / 17,5 / 15 |
 

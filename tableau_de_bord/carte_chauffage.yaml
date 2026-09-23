@@ -85,6 +85,12 @@ cards:
         tap_action:
           action: toggle
       - type: button
+        entity: input_boolean.confort_boulangerie
+        name: Boulangerie
+        icon: mdi:bread-slice
+        tap_action:
+          action: toggle
+      - type: button
         entity: input_boolean.confort_cuisine
         name: Cuisine
         icon: mdi:silverware-fork-knife
@@ -110,6 +116,8 @@ cards:
         name: SdB enfants
       - entity: sensor.temperature_chambre_laurent
         name: Chambre Lolo
+      - entity: sensor.temperature_boulangerie
+        name: Boulangerie
       - entity: sensor.temperature_cuisine
         name: Cuisine
       - entity: sensor.temperature_salon

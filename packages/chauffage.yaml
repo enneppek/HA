@@ -61,6 +61,15 @@ template:
                   'humidite': 'sensor.humidite_chambre_laurent',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
+                'boulangerie': {
+                  'nom': 'Boulangerie',
+                  'vannes': ['climate.vanne_boulangerie'],
+                  'sonde': 'sensor.temperature_boulangerie',
+                  'occupants': ['laurent'],
+                  'clim': none,
+                  'humidite': 'sensor.humidite_boulangerie',
+                  'confort': 19.0, 'nuit': 16.0, 'absence': 15.0
+                },
                 'cuisine': {
                   'nom': 'Cuisine',
                   'vannes': ['climate.vanne_cuisine_1', 'climate.vanne_cuisine_2'],
@@ -304,6 +313,10 @@ input_boolean:
   confort_chambre_laurent:
     name: "Confort - Chambre Laurent"
     icon: mdi:sofa
+  confort_boulangerie:
+    name: "Confort - Boulangerie"
+    icon: mdi:bread-slice
+
   confort_cuisine:
     name: "Confort - Cuisine"
     icon: mdi:silverware-fork-knife
@@ -381,6 +394,8 @@ automation:
           - input_boolean.confort_chambre_pablo
           - input_boolean.confort_sdb_enfants
           - input_boolean.confort_chambre_laurent
+          - input_boolean.confort_boulangerie
+          - input_boolean.confort_boulangerie
           - input_boolean.confort_cuisine
           - input_boolean.confort_salon
           - schedule.chauffage

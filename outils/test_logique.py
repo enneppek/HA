@@ -190,6 +190,13 @@ verifier("Léo présent : sa chambre chauffe", m.consignes['chambre_leo'], 19.5)
 verifier("Pablo absent : sa chambre à 15°", m.consignes['chambre_pablo'], 15.0)
 verifier("SdB commune : chauffée par le seul Léo", m.consignes['sdb_enfants'], 21.0)
 
+m = evaluer(Monde(presents=['leo'], semaine=41))
+verifier("boulangerie : Lolo absent, elle reste à 15°",
+         m.consignes['boulangerie'], 15.0)
+m = evaluer(Monde(presents=['laurent'], semaine=41))
+verifier("boulangerie : Lolo présent, elle chauffe",
+         m.consignes['boulangerie'], 19.0)
+
 titre("Bouton confort")
 m = evaluer(Monde(presents=['laurent'], horaire=False, semaine=40,
                   boosts=['chambre_pablo']))
@@ -200,7 +207,8 @@ verifier("les autres pièces ne bougent pas", m.consignes['chambre_leo'], 15.0)
 titre("Arbitrage radiateur / clim")
 froid_partout = {f'sensor.temperature_{p}': 16.0 for p in
                  ['chambre_leo', 'chambre_pablo', 'sdb_enfants',
-                  'chambre_laurent', 'salon', 'cuisine']}
+                  'chambre_laurent', 'salon', 'cuisine',
+                  'boulangerie']}
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
                   temps=froid_partout, exterieur=12.0, clim_chaud=True))
@@ -213,6 +221,8 @@ verifier("salon (radiateur, pas de clim) au radiateur",
 verifier("le salon porte bien deux vannes",
          len(m.pieces['salon']['vannes']), 2)
 verifier("la cuisine aussi", len(m.pieces['cuisine']['vannes']), 2)
+verifier("la boulangerie en porte une",
+         len(m.pieces['boulangerie']['vannes']), 1)
 verifier("la chambre de Lolo n'en porte aucune",
          m.pieces['chambre_laurent']['vannes'], [])
 
@@ -238,14 +248,16 @@ verifier("déficit chez Léo -> demande", rendre(TPL_DEMANDE, m), 'True')
 m = evaluer(Monde(presents=['laurent'], semaine=40,
                   temps={**froid_partout,
                          'sensor.temperature_salon': 21.0,
-                         'sensor.temperature_cuisine': 21.0}))
+                         'sensor.temperature_cuisine': 21.0,
+                         'sensor.temperature_boulangerie': 21.0}))
 verifier("chambres vides à 16° (>15) -> pas de demande",
          rendre(TPL_DEMANDE, m), 'False')
 
 m = evaluer(Monde(presents=['laurent'], semaine=41,
                   temps={**froid_partout,
                          'sensor.temperature_salon': 21.0,
-                         'sensor.temperature_cuisine': 21.0}))
+                         'sensor.temperature_cuisine': 21.0,
+                         'sensor.temperature_boulangerie': 21.0}))
 verifier("chambre Lolo froide mais servie par la clim -> pas de chaudière",
          rendre(TPL_DEMANDE, m), 'False')
 
@@ -273,6 +285,7 @@ verifier("  -> au-dessus de la cuisine, le T6 ne peut pas se satisfaire",
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
                   temps={'sensor.temperature_cuisine': 21.0,
                          'sensor.temperature_salon': 21.0,
+                         'sensor.temperature_boulangerie': 21.0,
                          'sensor.temperature_chambre_leo': 20.0,
                          'sensor.temperature_chambre_pablo': 20.0,
                          'sensor.temperature_sdb_enfants': 22.0}))
