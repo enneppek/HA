@@ -32,6 +32,7 @@ TPL_TEXT = capteur(chauffage, 'Chauffage température extérieure')['state']
 TPL_RELAIS = capteur(chauffage, 'Chauffage relais')['attributes']['relais']
 TPL_DEMANDE = capteur(chauffage, 'Chauffage demande chaudière')['state']
 TPL_ORDRES = capteur(clim_pkg, 'Clim pilotage')['attributes']['ordres']
+TPL_CHAUDIERE = capteur(chauffage, 'Chauffage consigne chaudière')['state']
 
 
 class Monde:
@@ -45,6 +46,8 @@ class Monde:
         'input_number.clim_deshu_delta': 1.5,
         'input_number.clim_deshu_temp_max': 22,
         'input_number.clim_temp_min': 15,
+        'input_number.chaudiere_consigne_marche': 26,
+        'input_number.chaudiere_consigne_arret': 10,
     }
 
     def __init__(self, presents=(), horaire=True, boosts=(), temps=None,
@@ -64,6 +67,7 @@ class Monde:
         self.temp_min, self.manuel, self.clim_etat = temp_min, manuel, clim_etat
         self.reglages = {**self.REGLAGES, **(reglages or {})}
         self.pieces = self.consignes = self.relais = self.ordres = None
+        self.demande = False
         self.text = None
 
     def states(self, eid):
@@ -71,6 +75,8 @@ class Monde:
             return 'unknown'
         if eid in self.reglages:
             return str(self.reglages[eid])
+        if eid == 'binary_sensor.chauffage_demande_chaudiere':
+            return 'on' if self.demande else 'off'
         if eid == 'schedule.chauffage':
             return 'on' if self.horaire else 'off'
         if eid == 'sensor.temperature_exterieure':
@@ -134,6 +140,7 @@ def evaluer(m):
     m.text = float(rendre(TPL_TEXT, m))
     m.relais = eval(rendre(TPL_RELAIS, m))
     m.ordres = eval(rendre(TPL_ORDRES, m))
+    m.demande = rendre(TPL_DEMANDE, m) == 'True'
     return m
 
 
@@ -246,6 +253,43 @@ verifier("chambre Lolo froide mais servie par la clim -> pas de chaudière",
 m = evaluer(Monde(presents=['laurent'], semaine=40,
                   temps={**froid_partout, 'sensor.temperature_salon': 21.0}))
 verifier("cuisine froide et occupée -> demande", rendre(TPL_DEMANDE, m), 'True')
+
+titre("Chaudière — le T6 n'est plus qu'un relais")
+# Le T6 est dans la cuisine. Le scénario qui cassait l'installation : cuisine
+# à bonne température, chambre d'enfant glaciale. Le brûleur doit tourner.
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
+                  temps={'sensor.temperature_cuisine': 24.0,
+                         'sensor.temperature_salon': 21.0,
+                         'sensor.temperature_chambre_leo': 16.0,
+                         'sensor.temperature_chambre_pablo': 16.0,
+                         'sensor.temperature_sdb_enfants': 21.0}))
+verifier("cuisine chaude mais chambres froides -> demande maintenue",
+         rendre(TPL_DEMANDE, m), 'True')
+verifier("  -> consigne d'appel envoyée au T6",
+         rendre(TPL_CHAUDIERE, m), '26.0')
+verifier("  -> au-dessus de la cuisine, le T6 ne peut pas se satisfaire",
+         float(rendre(TPL_CHAUDIERE, m)) > 24.0, True)
+
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
+                  temps={'sensor.temperature_cuisine': 21.0,
+                         'sensor.temperature_salon': 21.0,
+                         'sensor.temperature_chambre_leo': 20.0,
+                         'sensor.temperature_chambre_pablo': 20.0,
+                         'sensor.temperature_sdb_enfants': 22.0}))
+verifier("toutes les pièces à température -> pas de demande",
+         rendre(TPL_DEMANDE, m), 'False')
+verifier("  -> consigne de repos, le brûleur relâche",
+         rendre(TPL_CHAUDIERE, m), '10.0')
+
+m = evaluer(Monde(presents=['leo'], semaine=41,
+                  reglages={'input_number.chaudiere_consigne_marche': 30},
+                  temps={'sensor.temperature_cuisine': 28.0,
+                         'sensor.temperature_salon': 21.0,
+                         'sensor.temperature_chambre_leo': 16.0,
+                         'sensor.temperature_chambre_pablo': 20.0,
+                         'sensor.temperature_sdb_enfants': 22.0}))
+verifier("consigne d'appel relevable si la cuisine chauffe trop",
+         rendre(TPL_CHAUDIERE, m), '30.0')
 
 titre("Clim — déshumidification (comportement par défaut)")
 m = evaluer(Monde(presents=['laurent'], semaine=41,

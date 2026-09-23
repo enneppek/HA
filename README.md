@@ -200,6 +200,38 @@ suivent pas la parité : `input_select.garde_enfants` permet de forcer
 
 ## Points de vigilance
 
+### Zigbee : ZHA
+
+L'installation tourne sous **ZHA**.
+
+**Ne jamais supprimer un appareil pour le réappairer.** ZHA recrée alors des
+entités suffixées `_2` (`climate.vanne_salon_1_2`), et toute automatisation
+qui référence les anciennes cesse de fonctionner en silence. Un appareil
+réappairé sans suppression rejoint avec la même adresse IEEE et **conserve
+ses identifiants**.
+
+Dans l'ordre, pour une vanne qui a décroché :
+
+1. **Reconfigurer l'appareil** (fiche de l'appareil > Reconfigurer). Cela
+   relit les clusters et rétablit les liaisons, et suffit souvent.
+2. Si elle a réellement quitté le réseau : ZHA en mode ajout, puis appui long
+   sur le bouton de la vanne jusqu'au clignotement du symbole réseau.
+3. Réveiller l'appareil pendant l'opération — une vanne sur pile dort, et ZHA
+   ne peut lui parler que fenêtre ouverte.
+
+**Chercher la cause, sinon le problème reviendra.** Deux vannes voisines
+perdues simultanément ne relèvent pas du hasard :
+
+- **piles faibles** — une TRVZB sous tension basse décroche sans prévenir ;
+- **routeur Zigbee disparu** — les vannes sont des terminaux sur pile et
+  dépendent d'un appareil sur secteur à proximité. Une prise Zigbee
+  débranchée ou déplacée fait décrocher tout ce qui transitait par elle.
+
+**Point à vérifier sous ZHA :** l'entrée de température externe des TRVZB
+n'est pas exposée de la même façon que sous Zigbee2MQTT. Si
+`number.<vanne>_external_temperature_input` n'existe pas, se rabattre sur
+`number.<vanne>_local_temperature_calibration` (voir ci-dessous).
+
 ### La sonde de Léo
 
 Une vanne thermostatique mesure la température au ras du radiateur, donc
@@ -219,7 +251,47 @@ cette entité n'existe pas chez toi, deux solutions de repli :
 Le choix dépend du firmware réel de tes vannes — d'où l'intérêt de l'export
 d'entités.
 
-### Le Lyric T6 coupe la chaudière
+### Le Lyric T6 détourné en relais
+
+**Le T6 est installé dans la cuisine.** Laissé en thermostat, il confie le
+chauffage de toute la maison à la température d'une seule pièce — celle qui
+monte le plus vite, cuisson comprise. Le symptôme observé : les vannes de la
+cuisine ouvertes à 30 °C, la cuisine satisfaite, **le brûleur coupé pendant
+qu'une chambre est à 16 °C**. Aucune consigne de vanne ne rattrape cela :
+sans eau chaude, une vanne ouverte ne chauffe rien.
+
+Le T6 n'est donc plus un thermostat, mais un interrupteur :
+
+| Demande de Home Assistant | Consigne envoyée au T6 | Effet |
+|---|---|---|
+| Une pièce au moins réclame | `chaudiere_consigne_marche` (26 °C) | Le T6 ne peut être satisfait, le brûleur tourne |
+| Aucune pièce ne réclame | `chaudiere_consigne_arret` (10 °C) | Le T6 relâche, le brûleur s'arrête |
+
+Ce sont les vannes, pièce par pièce, qui règlent réellement les températures.
+Le T6 ne fait plus qu'ouvrir et fermer le robinet d'eau chaude.
+
+**Pourquoi 26 °C et non 30 °C.** Si Home Assistant tombe en panne, le T6
+reste figé sur sa dernière consigne. Cette valeur borne alors la température
+de la cuisine : à 30 °C elle deviendrait invivable, à 26 °C elle est
+seulement chaude. C'est le compromis entre « toujours appeler » et « échouer
+sans dégât ». Si ta cuisine dépasse régulièrement 26 °C en cuisinant, relève
+la consigne d'appel — c'est exactement à quoi sert le réglage.
+
+**À corriger sur place :** remets les vannes de la cuisine en régulation
+normale. Leur réglage à 30 °C était un contournement du problème ; une fois
+le T6 en relais, il devient nuisible — la cuisine surchaufferait et le T6 ne
+réclamerait plus. Le package s'en charge automatiquement dès qu'il tourne.
+
+**Deux vérifications sur place :**
+
+- Le T6 doit être en **maintien permanent**, sinon son programme interne
+  reprendra la main sur la consigne envoyée par HA.
+- L'installation a besoin d'un **débit minimal** : si toutes les vannes se
+  ferment pendant que le brûleur tourne, la chaudière cycle court. La
+  temporisation de 10 minutes y aide, mais un radiateur non robinetté ou une
+  soupape différentielle reste la vraie réponse hydraulique.
+
+### Ancienne note — le T6 coupe la chaudière
 
 Le T6 est un thermostat d'ambiance : satisfait, il arrête le brûleur et les
 vannes n'ont plus d'eau chaude, quelle que soit leur consigne. D'où

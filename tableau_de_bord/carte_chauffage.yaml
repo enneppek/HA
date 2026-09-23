@@ -116,7 +116,9 @@ cards:
         name: Salon
       - type: divider
       - entity: climate.lyric_t6
-        name: Chaudière (Lyric T6)
+        name: Lyric T6 (relais chaudière)
+      - entity: sensor.chauffage_consigne_chaudiere
+        name: Consigne envoyée au T6
 
   # --- Consignes appliquées, pour vérifier ce que fait la logique ---------
   - type: markdown
@@ -191,6 +193,10 @@ cards:
         name: Garde des enfants
       - entity: input_number.duree_confort
         name: Durée d'un appui confort
+      - entity: input_number.chaudiere_consigne_marche
+        name: Chaudière - consigne d'appel
+      - entity: input_number.chaudiere_consigne_arret
+        name: Chaudière - consigne de repos
       - entity: schedule.chauffage
         name: Horaire
       - type: divider

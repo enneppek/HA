@@ -231,8 +231,26 @@ template:
             {% endfor %}
             {{ ns.d | round(1) }}
 
+  ##############################################################################
+  # 6. CONSIGNE ENVOYÉE AU LYRIC T6
+  #
+  # Le T6 n'est plus un thermostat mais un interrupteur : soit on le pousse
+  # assez haut pour qu'il appelle le brûleur, soit assez bas pour qu'il le
+  # relâche. Ce sont les vannes, pièce par pièce, qui règlent réellement les
+  # températures.
+  ##############################################################################
+  - sensor:
+      - name: "Chauffage consigne chaudière"
+        unique_id: chauffage_consigne_chaudiere
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: >-
+          {{ states('input_number.chaudiere_consigne_marche') | float(default=26)
+             if is_state('binary_sensor.chauffage_demande_chaudiere', 'on')
+             else states('input_number.chaudiere_consigne_arret') | float(default=10) }}
+
 ################################################################################
-# 6. HORAIRE — semaines impaires et présence
+# 7. HORAIRE — semaines impaires et présence
 # Modifiable ensuite dans l'interface : Paramètres > Appareils et services >
 # Entrées > Planifications.
 ################################################################################
@@ -261,7 +279,7 @@ schedule:
         to: "22:00:00"
 
 ################################################################################
-# 7. COMMANDES — présence, confort par pièce, mode de garde
+# 8. COMMANDES — présence, confort par pièce, mode de garde
 ################################################################################
 input_boolean:
   presence_leo:
@@ -305,6 +323,33 @@ input_select:
     initial: "Automatique (parité)"
 
 input_number:
+  # Le Lyric T6 est installé dans la CUISINE. Tel quel, il régule sur la
+  # température de cette seule pièce et coupe le brûleur dès qu'elle est
+  # satisfaite — privant de chaleur toute la maison. On le détourne donc en
+  # relais marche/arrêt : Home Assistant décide, le T6 exécute.
+  #
+  # Consigne de marche : assez haute pour que le T6 réclame toujours quand
+  # HA le veut, mais PAS au maximum. Si Home Assistant tombe en panne, le T6
+  # reste sur cette valeur : elle borne alors la température de la cuisine.
+  # 30 °C rendrait la cuisine invivable, 26 °C la rend seulement chaude.
+  chaudiere_consigne_marche:
+    name: "Chaudière - consigne d'appel"
+    icon: mdi:fire
+    min: 22
+    max: 32
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 26
+
+  chaudiere_consigne_arret:
+    name: "Chaudière - consigne de repos"
+    icon: mdi:fire-off
+    min: 5
+    max: 16
+    step: 0.5
+    unit_of_measurement: "°C"
+    initial: 10
+
   duree_confort:
     name: "Durée d'un appui confort"
     icon: mdi:timer-sand
@@ -315,7 +360,7 @@ input_number:
     initial: 120
 
 ################################################################################
-# 8. AUTOMATISATIONS
+# 9. AUTOMATISATIONS
 ################################################################################
 automation:
   ##############################################################################
@@ -456,10 +501,14 @@ automation:
           entity_id: "{{ trigger.entity_id }}"
 
   ##############################################################################
-  # Chaudière mazout via le Lyric T6.
-  # Le T6 est le thermostat d'ambiance : tant qu'il est satisfait, la chaudière
-  # s'arrête et les vannes n'ont plus d'eau chaude. On le pousse donc haut dès
-  # qu'une pièce réclame, et on le laisse retomber sinon.
+  # Chaudière mazout via le Lyric T6, détourné en relais marche/arrêt.
+  #
+  # Le T6 étant dans la cuisine, le laisser réguler revenait à confier le
+  # chauffage de toute la maison à la température d'une seule pièce — celle
+  # qui chauffe le plus vite, cuisson comprise. On lui impose donc une
+  # consigne d'appel qu'il ne peut atteindre tant que HA réclame, et une
+  # consigne de repos sinon. Les températures réelles sont l'affaire des
+  # vannes.
   ##############################################################################
   - id: chauffage_pilotage_chaudiere
     alias: "Chauffage - pilotage de la chaudière"
@@ -468,6 +517,10 @@ automation:
       - platform: state
         entity_id: binary_sensor.chauffage_demande_chaudiere
         to: ["on", "off"]
+      - platform: state
+        entity_id:
+          - input_number.chaudiere_consigne_marche
+          - input_number.chaudiere_consigne_arret
       - platform: time_pattern
         minutes: "/30"
       - platform: homeassistant
@@ -479,8 +532,8 @@ automation:
     action:
       - variables:
           cible: >-
-            {{ 22 if is_state('binary_sensor.chauffage_demande_chaudiere', 'on')
-               else 15 }}
+            {{ states('sensor.chauffage_consigne_chaudiere')
+               | float(default=10) }}
       - condition: template
         value_template: >-
           {{ state_attr('climate.lyric_t6', 'temperature') | float(default=-99)
