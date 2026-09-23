@@ -157,6 +157,7 @@ template:
             {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
             {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
             {% set relais = state_attr('sensor.chauffage_relais', 'relais') or {} %}
+            {% set temps = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
             {% set seuil_froid = states('input_number.clim_seuil_froid') | float(default=26) %}
             {% set consigne_ete = states('input_number.clim_consigne_ete') | float(default=25) %}
             {% set seuil_hum = states('input_number.clim_seuil_humidite') | float(default=65) %}
@@ -176,7 +177,7 @@ template:
             {% set nd = namespace(d={}) %}
             {% for p, c in cfg.items() if c.clim %}
               {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
-              {% set mesure = states(c.sonde) | float(default=20) %}
+              {% set mesure = temps.get(p) | float(default=20) %}
               {% set humidite = states(c.humidite) | float(default=0) %}
               {% set cible = consignes.get(p, 15) | float(default=15) %}
               {# Hystérésis : une fois lancé, l'assèchement continue 5 points
@@ -283,7 +284,7 @@ automation:
     mode: single
     trigger:
       - platform: state
-        entity_id: climate.clim_chambre_lolo
+        entity_id: climate.clim_chambre
     condition:
       - condition: template
         value_template: "{{ trigger.to_state.context.user_id is not none }}"

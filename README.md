@@ -133,15 +133,36 @@ homeassistant:
 
 ## Pièces
 
-| Pièce | Vannes | Occupants | Confort / Nuit / Absence |
-|---|---|---|---|
-| Chambre Léo | 1 | Léo | 19,5 / 17 / 15 |
-| Chambre Pablo | 1 | Pablo | 19,5 / 17 / 15 |
-| Salle de bains enfants | 1 | Léo, Pablo | 21 / 18 / 15 |
-| Chambre Lolo | **aucune** — clim seule | Lolo | 19,5 / 17 / 15 |
-| Boulangerie | 1 (+ poêle à bois) | Lolo | 19 / 16 / 15 |
-| Cuisine | 2 | tous | 19 / 16,5 / 15 |
-| Salon | 2 | tous | 20,5 / 17,5 / 15 |
+| Pièce | Vannes | Température lue sur | Occupants | Confort / Nuit / Absence |
+|---|---|---|---|---|
+| Chambre Léo | `vanne_thermo_leo` | sonde `sonoff_t_hr_2` | Léo | 19,5 / 17 / 15 |
+| Chambre Pablo | `vt` | sonde `t_hr` | Pablo | 19,5 / 17 / 15 |
+| Salle de bains enfants | `sonoff_trvzb` | **ses vannes** | Léo, Pablo | 21 / 18 / 15 |
+| Chambre Lolo | **aucune** — clim seule | sonde `sonoff_snzb_02d` | Lolo | 19,5 / 17 / 15 |
+| Boulangerie | `vt_boulangerie` (+ poêle) | **sa vanne** | Lolo | 19 / 16 / 15 |
+| Cuisine | `vtherrmo_cuisine_1`, `vt_cuisine_couloir` | Lyric T6 | tous | 19 / 16,5 / 15 |
+| Salon | `vt_salon_aquarium`, `vt_salon_canape` | **ses vannes** | tous | 20,5 / 17,5 / 15 |
+
+### Trois sondes pour sept pièces
+
+L'installation compte 8 vannes mais seulement 3 sondes d'ambiance. Les pièces
+qui n'en ont pas voient leur température reprise de la **moyenne des sondes
+internes de leurs vannes**, exposée par `sensor.chauffage_temperatures`.
+
+Ces sondes lisent au ras du radiateur, donc trop chaud : la pièce est en
+réalité plus froide que la valeur affichée. C'est suffisant pour décider
+d'appeler ou non la chaudière, mais moins juste qu'une vraie sonde. L'attribut
+`origine` indique, pour chaque pièce, si la mesure vient d'une sonde ou d'un
+repli — la carte le signale par la mention _(estimée par les vannes)_.
+
+Le repli joue aussi quand une sonde tombe en panne ou s'épuise : la pièce
+bascule seule sur ses vannes au lieu de disparaître du calcul. Ajouter une
+sonde Sonoff dans une pièce améliore donc la régulation sans rien changer au
+code — il suffit de renseigner sa clé `sonde`.
+
+Une pièce sans sonde **ni** vanne ne serait pas mesurable : elle est alors
+traitée comme n'ayant pas besoin de chaleur, plutôt que de faire tourner le
+brûleur à l'aveugle.
 
 La boulangerie dispose en plus d'un **poêle à bois**. Aucun traitement
 particulier n'est nécessaire : quand le poêle tourne, la pièce dépasse sa

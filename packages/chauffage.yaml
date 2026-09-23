@@ -23,79 +23,147 @@ template:
              if state_attr('sensor.chauffage_configuration', 'pieces') else 5 }}
         attributes:
           pieces: >-
-            {# La boulangerie a en plus un poêle à bois. Rien de particulier à
-               prévoir : quand il tourne, la pièce dépasse sa consigne, cesse
-               de réclamer, et sa vanne se ferme d'elle-même. #}
+            {# Entités relevées sur l'instance le 24/09/2026.
+
+               `sonde` à `none` : la pièce n'a pas de sonde d'ambiance. La
+               température est alors reprise des sondes internes des vannes,
+               moins fiables (collées au radiateur) mais suffisantes pour
+               décider s'il faut appeler la chaudière.
+
+               La boulangerie a en plus un poêle à bois. Rien à prévoir :
+               quand il tourne, la pièce dépasse sa consigne, cesse de
+               réclamer, et sa vanne se ferme d'elle-même. #}
             {{
               {
                 'chambre_leo': {
                   'nom': 'Chambre Léo',
-                  'vannes': ['climate.vanne_chambre_leo'],
-                  'sonde': 'sensor.temperature_chambre_leo',
+                  'vannes': ['climate.vanne_thermo_leo_thermostat'],
+                  'entrees_externes': ['number.vanne_thermo_leo_valeur_du_capteur_de_temperature_externe'],
+                  'sonde': 'sensor.sonoff_t_hr_2_temperature',
+                  'humidite': 'sensor.sonoff_t_hr_2_humidite',
                   'occupants': ['leo'],
                   'clim': none,
-                  'humidite': 'sensor.humidite_chambre_leo',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
                 'chambre_pablo': {
                   'nom': 'Chambre Pablo',
-                  'vannes': ['climate.vanne_chambre_pablo'],
-                  'sonde': 'sensor.temperature_chambre_pablo',
+                  'vannes': ['climate.vt_thermostat'],
+                  'entrees_externes': ['number.vt_valeur_du_capteur_de_temperature_externe'],
+                  'sonde': 'sensor.t_hr_temperature',
+                  'humidite': 'sensor.t_hr_humidite',
                   'occupants': ['pablo'],
                   'clim': none,
-                  'humidite': 'sensor.humidite_chambre_pablo',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
                 'sdb_enfants': {
                   'nom': 'Salle de bains enfants',
-                  'vannes': ['climate.vanne_sdb_enfants'],
-                  'sonde': 'sensor.temperature_sdb_enfants',
+                  'vannes': ['climate.sonoff_trvzb_thermostat'],
+                  'entrees_externes': ['number.sonoff_trvzb_valeur_du_capteur_de_temperature_externe'],
+                  'sonde': none,
+                  'humidite': none,
                   'occupants': ['leo', 'pablo'],
                   'clim': none,
-                  'humidite': 'sensor.humidite_sdb_enfants',
                   'confort': 21.0, 'nuit': 18.0, 'absence': 15.0
                 },
                 'chambre_laurent': {
                   'nom': 'Chambre Lolo',
                   'vannes': [],
-                  'sonde': 'sensor.temperature_chambre_laurent',
+                  'entrees_externes': [],
+                  'sonde': 'sensor.sonoff_snzb_02d_temperature',
+                  'humidite': 'sensor.sonoff_snzb_02d_humidite',
                   'occupants': ['laurent'],
-                  'clim': 'climate.clim_chambre_lolo',
-                  'humidite': 'sensor.humidite_chambre_laurent',
+                  'clim': 'climate.clim_chambre',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
                 'boulangerie': {
                   'nom': 'Boulangerie',
-                  'vannes': ['climate.vanne_boulangerie'],
-                  'sonde': 'sensor.temperature_boulangerie',
+                  'vannes': ['climate.vt_boulangerie_thermostat'],
+                  'entrees_externes': ['number.vt_boulangerie_valeur_du_capteur_de_temperature_externe'],
+                  'sonde': none,
+                  'humidite': none,
                   'occupants': ['laurent'],
                   'clim': none,
-                  'humidite': 'sensor.humidite_boulangerie',
                   'confort': 19.0, 'nuit': 16.0, 'absence': 15.0
                 },
                 'cuisine': {
                   'nom': 'Cuisine',
-                  'vannes': ['climate.vanne_cuisine_1', 'climate.vanne_cuisine_2'],
-                  'sonde': 'sensor.temperature_cuisine',
+                  'vannes': ['climate.vtherrmo_cuisine_1_thermostat',
+                             'climate.vt_cuisine_couloir_thermostat'],
+                  'entrees_externes': ['number.vtherrmo_cuisine_1_valeur_du_capteur_de_temperature_externe',
+                                       'number.vt_cuisine_couloir_valeur_du_capteur_de_temperature_externe'],
+                  'sonde': 'sensor.thermostat_thermostat_indoor_temperature',
+                  'humidite': none,
                   'occupants': ['leo', 'pablo', 'laurent'],
                   'clim': none,
-                  'humidite': 'sensor.humidite_cuisine',
                   'confort': 19.0, 'nuit': 16.5, 'absence': 15.0
                 },
                 'salon': {
                   'nom': 'Salon',
-                  'vannes': ['climate.vanne_salon_1', 'climate.vanne_salon_2'],
-                  'sonde': 'sensor.temperature_salon',
-                  'occupants': ['laurent'],
+                  'vannes': ['climate.vt_salon_aquarium_thermostat',
+                             'climate.vt_salon_canape_thermostat'],
+                  'entrees_externes': ['number.vt_salon_aquarium_valeur_du_capteur_de_temperature_externe',
+                                       'number.vt_salon_canape_valeur_du_capteur_de_temperature_externe'],
+                  'sonde': none,
+                  'humidite': none,
+                  'occupants': ['leo', 'pablo', 'laurent'],
                   'clim': none,
-                  'humidite': 'sensor.humidite_salon',
                   'confort': 20.5, 'nuit': 17.5, 'absence': 15.0
                 }
               }
             }}
 
   ##############################################################################
-  # 2. CALCUL DES CONSIGNES — cœur de la logique
+  # 2. TEMPÉRATURE DE CHAQUE PIÈCE
+  #
+  # Toutes les pièces n'ont pas de sonde d'ambiance. À défaut, on reprend la
+  # moyenne des sondes internes de ses vannes : elles lisent au ras du
+  # radiateur, donc trop chaud, mais suffisent à décider d'appeler ou non la
+  # chaudière. Une pièce sans aucune mesure vaut `none`, et sera traitée plus
+  # loin comme n'ayant pas besoin de chaleur — mieux vaut ne pas chauffer à
+  # l'aveugle que de faire tourner le brûleur sans savoir.
+  ##############################################################################
+  - sensor:
+      - name: "Chauffage températures"
+        unique_id: chauffage_temperatures
+        icon: mdi:thermometer-lines
+        state: >-
+          {% set t = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
+          {{ t.values() | reject('none') | list | count }}
+        attributes:
+          temperatures: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set nd = namespace(d={}) %}
+            {% for p, c in cfg.items() %}
+              {% set directe = states(c.sonde) if c.sonde else 'unknown' %}
+              {% if directe not in ['unknown', 'unavailable', 'none', ''] %}
+                {% set t = directe | float(default=none) %}
+              {% else %}
+                {% set ns = namespace(lues=[]) %}
+                {% for v in c.vannes %}
+                  {% set lue = state_attr(v, 'current_temperature') %}
+                  {% if lue is not none %}
+                    {% set ns.lues = ns.lues + [lue | float(default=0)] %}
+                  {% endif %}
+                {% endfor %}
+                {% set t = ((ns.lues | sum) / (ns.lues | count)) | round(1)
+                           if ns.lues | count > 0 else none %}
+              {% endif %}
+              {% set nd.d = dict(nd.d.items() | list + [(p, t)]) %}
+            {% endfor %}
+            {{ nd.d }}
+          origine: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set nd = namespace(d={}) %}
+            {% for p, c in cfg.items() %}
+              {% set directe = states(c.sonde) if c.sonde else 'unknown' %}
+              {% set o = 'sonde' if directe not in ['unknown', 'unavailable', 'none', '']
+                         else ('vannes' if c.vannes | count > 0 else 'aucune') %}
+              {% set nd.d = dict(nd.d.items() | list + [(p, o)]) %}
+            {% endfor %}
+            {{ nd.d }}
+
+  ##############################################################################
+  # 3. CALCUL DES CONSIGNES — cœur de la logique
   #
   # Priorité, de la plus forte à la plus faible :
   #   1. Bouton confort de la pièce pressé      -> température de confort
@@ -149,7 +217,7 @@ template:
           semaine_paire: "{{ now().isocalendar()[1] % 2 == 0 }}"
 
   ##############################################################################
-  # 3. TEMPÉRATURE EXTÉRIEURE
+  # 4. TEMPÉRATURE EXTÉRIEURE
   # Arbitre le recours à la clim en chauffage : une pompe à chaleur perd son
   # avantage sur le mazout quand il gèle. Repli sur l'entité météo si aucune
   # sonde extérieure n'est disponible.
@@ -160,16 +228,22 @@ template:
         unit_of_measurement: "°C"
         device_class: temperature
         state: >-
-          {% set sonde = states('sensor.temperature_exterieure') %}
-          {% if sonde not in ['unknown', 'unavailable', 'none', ''] %}
-            {{ sonde | float(default=10) }}
-          {% else %}
-            {{ state_attr('weather.forecast_maison', 'temperature')
-               | float(default=10) }}
-          {% endif %}
+          {# Le Lyric T6 et la clim fournissent chacun une mesure extérieure.
+             Le T6 d'abord, la clim ensuite, la météo en dernier recours. #}
+          {% set sources = ['sensor.thermostat_thermostat_outdoor_temperature',
+                            'sensor.clim_chambre_outside_temperature'] %}
+          {% set ns = namespace(t=none) %}
+          {% for s in sources if ns.t is none %}
+            {% if states(s) not in ['unknown', 'unavailable', 'none', ''] %}
+              {% set ns.t = states(s) | float(default=none) %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.t if ns.t is not none
+             else state_attr('weather.forecast_maison', 'temperature')
+                  | float(default=10) }}
 
   ##############################################################################
-  # 4. ARBITRAGE — qui délivre la chaleur dans chaque pièce ?
+  # 5. ARBITRAGE — qui délivre la chaleur dans chaque pièce ?
   #
   # Règle : la clim ne prend une pièce en charge que si elle y est installée,
   # que l'appoint est autorisé, qu'il ne fait pas trop froid dehors pour que
@@ -191,9 +265,10 @@ template:
                           | float(default=10) %}
             {% set seuil = states('input_number.clim_seuil_pac') | float(default=5) %}
             {% set autorise = is_state('input_boolean.clim_auto_chaud', 'on') %}
+            {% set temps = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
             {% set nd = namespace(d={}) %}
             {% for p, c in cfg.items() %}
-              {% set mesure = states(c.sonde) | float(default=99) %}
+              {% set mesure = temps.get(p) | float(default=99) %}
               {% set cible = consignes.get(p, 0) | float(default=0) %}
               {% set demande = mesure < (cible - 0.3) %}
               {# Sans radiateur, la clim assure la pièce en toute saison :
@@ -208,7 +283,7 @@ template:
             {{ nd.d }}
 
   ##############################################################################
-  # 5. DEMANDE CHAUDIÈRE
+  # 6. DEMANDE CHAUDIÈRE
   # Vrai dès qu'une pièce accuse un déficit > 0.3 °C. Le delay_off de 10 min
   # évite que la chaudière ne cycle en courts créneaux.
   ##############################################################################
@@ -221,9 +296,10 @@ template:
           {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
           {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
           {% set relais = state_attr('sensor.chauffage_relais', 'relais') or {} %}
+          {% set temps = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
           {% set ns = namespace(demande=false) %}
           {% for p, c in cfg.items() %}
-            {% set mesure = states(c.sonde) | float(default=99) %}
+            {% set mesure = temps.get(p) | float(default=99) %}
             {% set cible = consignes.get(p, 0) | float(default=0) %}
             {% if mesure < (cible - 0.3)
                   and relais.get(p, 'radiateur') == 'radiateur' %}
@@ -235,16 +311,17 @@ template:
           deficit_max: >-
             {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
             {% set consignes = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+            {% set temps = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
             {% set ns = namespace(d=0) %}
             {% for p, c in cfg.items() %}
               {% set ecart = (consignes.get(p, 0) | float(default=0))
-                             - (states(c.sonde) | float(default=99)) %}
+                             - (temps.get(p) | float(default=99)) %}
               {% if ecart > ns.d %}{% set ns.d = ecart %}{% endif %}
             {% endfor %}
             {{ ns.d | round(1) }}
 
   ##############################################################################
-  # 6. CONSIGNE ENVOYÉE AU LYRIC T6
+  # 7. CONSIGNE ENVOYÉE AU LYRIC T6
   #
   # Le T6 n'est plus un thermostat mais un interrupteur : soit on le pousse
   # assez haut pour qu'il appelle le brûleur, soit assez bas pour qu'il le
@@ -262,7 +339,7 @@ template:
              else states('input_number.chaudiere_consigne_arret') | float(default=10) }}
 
 ################################################################################
-# 7. HORAIRE — semaines impaires et présence
+# 8. HORAIRE — semaines impaires et présence
 # Modifiable ensuite dans l'interface : Paramètres > Appareils et services >
 # Entrées > Planifications.
 ################################################################################
@@ -291,7 +368,7 @@ schedule:
         to: "22:00:00"
 
 ################################################################################
-# 8. COMMANDES — présence, confort par pièce, mode de garde
+# 9. COMMANDES — présence, confort par pièce, mode de garde
 ################################################################################
 input_boolean:
   presence_leo:
@@ -380,7 +457,7 @@ input_number:
     initial: 120
 
 ################################################################################
-# 9. AUTOMATISATIONS
+# 10. AUTOMATISATIONS
 ################################################################################
 automation:
   ##############################################################################
@@ -550,7 +627,7 @@ automation:
     condition:
       - condition: template
         value_template: >-
-          {{ states('climate.lyric_t6') not in ['unknown', 'unavailable'] }}
+          {{ states('climate.thermostat_thermostat') not in ['unknown', 'unavailable'] }}
     action:
       - variables:
           cible: >-
@@ -558,39 +635,66 @@ automation:
                | float(default=10) }}
       - condition: template
         value_template: >-
-          {{ state_attr('climate.lyric_t6', 'temperature') | float(default=-99)
+          {{ state_attr('climate.thermostat_thermostat', 'temperature') | float(default=-99)
              != cible | float }}
       - service: climate.set_temperature
         target:
-          entity_id: climate.lyric_t6
+          entity_id: climate.thermostat_thermostat
         data:
           temperature: "{{ cible }}"
 
   ##############################################################################
-  # La vanne de Léo régule sur sa propre sonde interne, collée au radiateur,
-  # donc trop chaude. On lui injecte la mesure de la sonde Sonoff de la pièce.
+  # Injection de la température réelle dans les vannes.
   #
-  # Suppose une vanne TRVZB sous Zigbee2MQTT, qui expose
-  # number.<vanne>_external_temperature_input. Sinon, voir le README.
+  # Une vanne régule sur sa sonde interne, collée au radiateur, donc trop
+  # chaude : elle ferme avant que la pièce soit à température. Quand la pièce
+  # dispose d'une vraie sonde d'ambiance, on la pousse dans l'entrée de
+  # température externe de chacune de ses vannes.
+  #
+  # Les pièces sans sonde d'ambiance sont ignorées : il n'y aurait rien de
+  # plus juste à leur injecter que ce qu'elles mesurent déjà.
   ##############################################################################
-  - id: chauffage_sonde_externe_leo
-    alias: "Chauffage - sonde externe chambre Léo"
+  - id: chauffage_sonde_externe
+    alias: "Chauffage - injecter la température réelle dans les vannes"
     mode: single
     trigger:
-      - platform: state
-        entity_id: sensor.temperature_chambre_leo
       - platform: time_pattern
         minutes: "/10"
-    condition:
-      - condition: template
-        value_template: >-
-          {{ states('sensor.temperature_chambre_leo')
-             not in ['unknown', 'unavailable']
-             and states('number.vanne_chambre_leo_external_temperature_input')
-             not in ['unknown', 'unavailable'] }}
+      - platform: homeassistant
+        event: start
     action:
-      - service: number.set_value
-        target:
-          entity_id: number.vanne_chambre_leo_external_temperature_input
-        data:
-          value: "{{ states('sensor.temperature_chambre_leo') | float }}"
+      - repeat:
+          for_each: >-
+            {{ (state_attr('sensor.chauffage_configuration', 'pieces') or {})
+               | list }}
+          sequence:
+            - variables:
+                cfg: >-
+                  {{ (state_attr('sensor.chauffage_configuration', 'pieces')
+                      or {})[repeat.item] }}
+                mesure: >-
+                  {{ (state_attr('sensor.chauffage_temperatures', 'temperatures')
+                      or {}).get(repeat.item) }}
+                origine: >-
+                  {{ (state_attr('sensor.chauffage_temperatures', 'origine')
+                      or {}).get(repeat.item, 'aucune') }}
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ origine == 'sonde' and mesure is not none
+                       and cfg.entrees_externes | count > 0 }}
+              then:
+                - repeat:
+                    for_each: "{{ cfg.entrees_externes }}"
+                    sequence:
+                      - if:
+                          - condition: template
+                            value_template: >-
+                              {{ states(repeat.item)
+                                 not in ['unknown', 'unavailable'] }}
+                        then:
+                          - service: number.set_value
+                            target:
+                              entity_id: "{{ repeat.item }}"
+                            data:
+                              value: "{{ mesure | float }}"
