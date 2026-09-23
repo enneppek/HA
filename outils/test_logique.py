@@ -243,8 +243,11 @@ verifier("salon et cuisine portent deux vannes",
 
 titre("Origine de la température de chaque pièce")
 m = evaluer(Monde(presents=['laurent']))
-verifier("chambre Léo : sonde d'ambiance", m.origine['chambre_leo'], 'sonde')
+verifier("chambre Pablo : sonde d'ambiance", m.origine['chambre_pablo'], 'sonde')
+verifier("chambre Lolo : sonde d'ambiance", m.origine['chambre_laurent'], 'sonde')
 verifier("cuisine : sonde du Lyric T6", m.origine['cuisine'], 'sonde')
+verifier("chambre Léo : repli, sa sonde est perdue",
+         m.origine['chambre_leo'], 'vannes')
 verifier("salon : repli sur ses vannes", m.origine['salon'], 'vannes')
 verifier("SdB enfants : repli sur sa vanne", m.origine['sdb_enfants'], 'vannes')
 verifier("boulangerie : repli sur sa vanne", m.origine['boulangerie'], 'vannes')
@@ -255,6 +258,10 @@ verifier("sonde en panne : bascule sur les vannes",
          m.origine['chambre_pablo'], 'vannes')
 verifier("  -> et la mesure reste exploitable",
          m.temperatures['chambre_pablo'], 16.0)
+
+verifier("deux sondes d'ambiance déclarées",
+         sorted(p for p, c in PIECES.items() if c['sonde'] and 'thermostat' not in c['sonde']),
+         ['chambre_laurent', 'chambre_pablo'])
 
 titre("Parité des semaines")
 m = evaluer(Monde(presents=['laurent'], semaine=40))
