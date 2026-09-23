@@ -1,0 +1,45 @@
+{# ---------------------------------------------------------------
+   À coller dans Home Assistant : Outils de développement > Modèle
+   Copier le résultat et le coller dans la conversation (ou dans
+   inventaire.md de ce dépôt).
+   Aucune donnée sensible : uniquement des identifiants d'entités.
+   --------------------------------------------------------------- #}
+=== CLIMATE (Lyric T6, Panasonic, TRV Sonoff) ===
+{% for s in states.climate %}
+- {{ s.entity_id }} | "{{ s.name }}" | {{ s.state }} | modes={{ s.attributes.hvac_modes | default([]) | join(',') }} | preset={{ s.attributes.preset_modes | default([]) | join(',') }} | temp={{ s.attributes.current_temperature | default('?') }}
+{%- endfor %}
+
+=== PERSON ===
+{% for s in states.person %}
+- {{ s.entity_id }} | "{{ s.name }}" | {{ s.state }}
+{%- endfor %}
+
+=== DEVICE_TRACKER ===
+{% for s in states.device_tracker %}
+- {{ s.entity_id }} | "{{ s.name }}" | {{ s.state }} | source={{ s.attributes.source_type | default('?') }}
+{%- endfor %}
+
+=== CAPTEURS TEMPERATURE ===
+{% for s in states.sensor if s.attributes.device_class | default('') == 'temperature' %}
+- {{ s.entity_id }} | "{{ s.name }}" | {{ s.state }}
+{%- endfor %}
+
+=== CAPTEURS HUMIDITE ===
+{% for s in states.sensor if s.attributes.device_class | default('') == 'humidity' %}
+- {{ s.entity_id }} | "{{ s.name }}" | {{ s.state }}
+{%- endfor %}
+
+=== OUVRANTS (portes/fenetres) ===
+{% for s in states.binary_sensor if s.attributes.device_class | default('') in ['door','window','opening'] %}
+- {{ s.entity_id }} | "{{ s.name }}" | {{ s.state }}
+{%- endfor %}
+
+=== NUMBER / SWITCH / VALVE (vannes Sonoff) ===
+{% for d in ['number','switch','valve'] %}{% for s in states[d] %}
+- {{ s.entity_id }} | "{{ s.name }}" | {{ s.state }}
+{%- endfor %}{% endfor %}
+
+=== ZONES ===
+{% for s in states.zone %}
+- {{ s.entity_id }} | "{{ s.name }}"
+{%- endfor %}
