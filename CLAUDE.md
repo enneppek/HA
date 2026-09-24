@@ -91,7 +91,9 @@ le capteur « unavailable », sans autre signal.
 
 Package actif depuis le 24/09/2026 : tous les capteurs `sensor.chauffage_*`
 ont une valeur, la sonde `t_hr` de Léo est revenue. Calendrier de garde
-confirmé : semaine impaire = enfants présents.
+confirmé : semaine impaire = enfants présents. Sans aucun enfant présent,
+leurs deux chambres et la salle de bains restent à la température d'absence
+(15 °C) : choix confirmé par Laurent, de préférence à un arrêt complet (OFF).
 
 ## Réglages et horaires
 
