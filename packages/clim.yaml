@@ -195,13 +195,19 @@ template:
 # 3. APPLICATION
 ################################################################################
 automation:
+  #
+  # `restart` et non `single` : un appui (arrêter l'assèchement, par exemple)
+  # arrivant pendant qu'une exécution envoie encore ses ordres au cloud ne
+  # doit pas être ignoré ; la dernière intention l'emporte.
   - id: clim_pilotage_automatique
     alias: "Clim - pilotage automatique"
-    mode: single
+    mode: restart
     trigger:
       - platform: time_pattern
         minutes: "/5"
+        id: horloge
       - platform: state
+        id: commande
         entity_id:
           - input_boolean.clim_auto_froid
           - input_boolean.clim_auto_chaud
@@ -211,6 +217,7 @@ automation:
           - input_boolean.presence_laurent
       - platform: homeassistant
         event: start
+        id: demarrage
     condition:
       # Tant que tu pilotes à la main, l'automatisation se tait.
       - condition: state
@@ -231,12 +238,17 @@ automation:
                       or {})[repeat.item] }}
             # `if/then` et non `condition:` : une condition qui échoue
             # interromprait la boucle entière, pas la seule itération.
+            # Garde anti-rafale (5 min entre deux changements de mode, pour
+            # ménager le quota Comfort Cloud) : seulement pour la vérification
+            # périodique. Une commande de Laurent passe tout de suite.
             - if:
                 - condition: template
                   value_template: >-
                     {{ states(clim) not in ['unknown', 'unavailable']
                        and states(clim) != ordre.mode
-                       and (now() - states[clim].last_changed).total_seconds() > 300 }}
+                       and (trigger.id != 'horloge'
+                            or (now() - states[clim].last_changed)
+                               .total_seconds() > 300) }}
               then:
                 - service: climate.set_hvac_mode
                   target:
@@ -311,16 +323,19 @@ automation:
   ##############################################################################
   # Assèchement à la demande.
   #
-  # Appuyer sur le bouton est une demande explicite : elle reprend la main
-  # sur un éventuel pilotage manuel en cours, sans quoi rien ne se passerait.
+  # Appuyer sur le bouton, pour lancer comme pour arrêter, est une demande
+  # explicite : elle reprend la main sur un éventuel pilotage manuel en cours,
+  # sans quoi l'automatisation resterait muette et rien ne se passerait.
+  # `from` et `to` excluent la restauration d'état au démarrage.
   ##############################################################################
   - id: clim_assechement_debut
-    alias: "Clim - lancer l'assèchement"
+    alias: "Clim - reprendre la main à chaque appui sur Assécher"
     mode: single
     trigger:
       - platform: state
         entity_id: input_boolean.clim_assechement
-        to: "on"
+        from: ["on", "off"]
+        to: ["on", "off"]
     action:
       - service: input_boolean.turn_off
         target:

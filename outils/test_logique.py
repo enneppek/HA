@@ -694,10 +694,35 @@ m = evaluer(Monde(presents=[], semaine=40, assechement=True,
 verifier("pièce à 9° : l'assèchement (24°) couvre aussi le minimum",
          m.ordres['chambre_laurent']['temp'], 24)
 
+pilotage = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_pilotage_automatique')
+verifier("un appui pendant une exécution n'est pas ignoré (mode restart)",
+         pilotage['mode'], 'restart')
+garde_mode = pilotage['action'][1]['repeat']['sequence'][1]['if'][0]['value_template']
+
+
+def changement_autorise(declencheur, minutes, etat='heat', voulu='off'):
+    m = Monde(clim_etat=etat, depuis={'climate.clim_chambre': minutes})
+    return rendre_brut(garde_mode, {'states': Etats(m), 'now': m.now,
+                                    'clim': 'climate.clim_chambre',
+                                    'ordre': {'mode': voulu},
+                                    'trigger': {'id': declencheur}})
+
+
+verifier("arrêt demandé 1 min après le lancement : envoyé tout de suite",
+         changement_autorise('commande', 1), 'True')
+verifier("vérification périodique 1 min après un changement : retenue",
+         changement_autorise('horloge', 1), 'False')
+verifier("vérification périodique 6 min après : envoyée",
+         changement_autorise('horloge', 6), 'True')
+verifier("clim déjà dans l'état voulu : rien n'est envoyé",
+         changement_autorise('commande', 1, etat='off', voulu='off'), 'False')
+
 debut_assechement = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_assechement_debut')
 verifier("appuyer sur le bouton reprend la main sur le pilotage manuel",
          debut_assechement['action'][0]['target']['entity_id'],
          'input_boolean.clim_pilotage_manuel')
+verifier("  -> à l'arrêt comme au lancement",
+         sorted(debut_assechement['trigger'][0]['to']), ['off', 'on'])
 
 fin_assechement = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_assechement_fin')
 garde_fin = fin_assechement['condition'][1]['value_template']

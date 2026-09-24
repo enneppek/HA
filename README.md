@@ -478,8 +478,11 @@ efficacement. Il l'abaisse en réchauffant l'air plutôt qu'en extrayant de
 l'eau — ce qui est justement l'effet recherché contre la condensation et les
 moisissures sur les parois froides.
 
-Appuyer sur le bouton est une demande explicite : cela désactive un éventuel
-pilotage manuel en cours, sans quoi rien ne se passerait. La fin est vérifiée
+Appuyer sur le bouton, pour lancer comme pour arrêter, est une demande
+explicite : cela désactive un éventuel pilotage manuel en cours, sans quoi
+rien ne se passerait. Pour la même raison, la garde anti-rafale de
+Comfort Cloud (5 minutes entre deux changements de mode) ne s'applique
+qu'aux vérifications périodiques : une commande passe immédiatement. La fin est vérifiée
 chaque minute, et non par une minuterie, qu'un redémarrage de Home Assistant
 annulerait.
 
