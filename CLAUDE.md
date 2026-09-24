@@ -72,14 +72,15 @@ le capteur « unavailable », sans autre signal.
 - `person.keppenne` = Laurent. Pas d'entité de présence pour Léo et Pablo :
   présence par parité de semaine (impaire = présents) et boutons manuels.
 
+## État du déploiement
+
+Package actif depuis le 24/09/2026 : tous les capteurs `sensor.chauffage_*`
+ont une valeur, la sonde `t_hr` de Léo est revenue. Calendrier de garde
+confirmé : semaine impaire = enfants présents.
+
 ## En suspens
 
-- Premier redémarrage avec le package : vérifier que les capteurs
-  `sensor.chauffage_*` ont une valeur et que le journal ne signale pas
-  d'erreur.
 - Lyric T6 à passer en maintien permanent.
-- Confirmer le calendrier de garde (semaine impaire = enfants présents).
-- Sonde `t_hr` de Léo indisponible : pile ou réappairage.
 - Interrupteurs à activer après le premier démarrage : présence Laurent,
   « Limiter l'humidité », « Maintenir une température minimale ».
 - Add-on Tailscale qui ne redémarre plus ; statut d'un éventuel essai Nabu Casa.
