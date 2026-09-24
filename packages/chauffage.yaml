@@ -25,10 +25,10 @@ template:
           pieces: >-
             {# Entités relevées sur l'instance le 24/09/2026.
 
-               Deux sondes d'ambiance seulement, pour sept pièces : la chambre
-               de Pablo et celle de Lolo. La cuisine emprunte celle du Lyric
-               T6, qui s'y trouve. Les autres pièces se rabattent sur les
-               sondes internes de leurs vannes — voir le README.
+               Trois sondes d'ambiance, une par chambre : Léo, Pablo, Lolo.
+               La cuisine emprunte celle du Lyric T6, qui s'y trouve. Les
+               autres pièces se rabattent sur les sondes internes de leurs
+               vannes — voir le README.
 
                `sonde` à `none` : la pièce n'a pas de sonde d'ambiance. La
                température est alors reprise des sondes internes des vannes,
@@ -44,8 +44,8 @@ template:
                   'nom': 'Chambre Léo',
                   'vannes': ['climate.vanne_thermo_leo_thermostat'],
                   'entrees_externes': ['number.vanne_thermo_leo_valeur_du_capteur_de_temperature_externe'],
-                  'sonde': none,
-                  'humidite': none,
+                  'sonde': 'sensor.t_hr_temperature',
+                  'humidite': 'sensor.t_hr_humidite',
                   'occupants': ['leo'],
                   'clim': none,
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0

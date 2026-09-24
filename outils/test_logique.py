@@ -246,8 +246,7 @@ m = evaluer(Monde(presents=['laurent']))
 verifier("chambre Pablo : sonde d'ambiance", m.origine['chambre_pablo'], 'sonde')
 verifier("chambre Lolo : sonde d'ambiance", m.origine['chambre_laurent'], 'sonde')
 verifier("cuisine : sonde du Lyric T6", m.origine['cuisine'], 'sonde')
-verifier("chambre Léo : repli, sa sonde est perdue",
-         m.origine['chambre_leo'], 'vannes')
+verifier("chambre Léo : sonde d'ambiance", m.origine['chambre_leo'], 'sonde')
 verifier("salon : repli sur ses vannes", m.origine['salon'], 'vannes')
 verifier("SdB enfants : repli sur sa vanne", m.origine['sdb_enfants'], 'vannes')
 verifier("boulangerie : repli sur sa vanne", m.origine['boulangerie'], 'vannes')
@@ -259,9 +258,17 @@ verifier("sonde en panne : bascule sur les vannes",
 verifier("  -> et la mesure reste exploitable",
          m.temperatures['chambre_pablo'], 16.0)
 
-verifier("deux sondes d'ambiance déclarées",
+verifier("une sonde d'ambiance par chambre",
          sorted(p for p, c in PIECES.items() if c['sonde'] and 'thermostat' not in c['sonde']),
-         ['chambre_laurent', 'chambre_pablo'])
+         ['chambre_laurent', 'chambre_leo', 'chambre_pablo'])
+
+# La sonde de Léo, retrouvée, remonte encore « unavailable » tant qu'elle
+# n'a pas rejoint le réseau : la chambre doit tenir sur sa vanne entre-temps.
+m = evaluer(Monde(presents=['leo'], sondes_indispo=['chambre_leo'],
+                  temps={'chambre_leo': 17.0}))
+verifier("sonde de Léo pas encore revenue : repli sur sa vanne",
+         m.origine['chambre_leo'], 'vannes')
+verifier("  -> la chambre reste pilotable", m.temperatures['chambre_leo'], 17.0)
 
 titre("Parité des semaines")
 m = evaluer(Monde(presents=['laurent'], semaine=40))

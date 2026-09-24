@@ -135,7 +135,7 @@ homeassistant:
 
 | Pièce | Vannes | Température lue sur | Occupants | Confort / Nuit / Absence |
 |---|---|---|---|---|
-| Chambre Léo | `vanne_thermo_leo` | **sa vanne** | Léo | 19,5 / 17 / 15 |
+| Chambre Léo | `vanne_thermo_leo` | sonde `t_hr` | Léo | 19,5 / 17 / 15 |
 | Chambre Pablo | `vt` | sonde `sonoff_t_hr_2` | Pablo | 19,5 / 17 / 15 |
 | Salle de bains enfants | `sonoff_trvzb` | **ses vannes** | Léo, Pablo | 21 / 18 / 15 |
 | Chambre Lolo | **aucune** — clim seule | sonde `sonoff_snzb_02d` | Lolo | 19,5 / 17 / 15 |
@@ -143,11 +143,12 @@ homeassistant:
 | Cuisine | `vtherrmo_cuisine_1`, `vt_cuisine_couloir` | Lyric T6 | tous | 19 / 16,5 / 15 |
 | Salon | `vt_salon_aquarium`, `vt_salon_canape` | **ses vannes** | tous | 20,5 / 17,5 / 15 |
 
-### Deux sondes pour sept pièces
+### Trois sondes pour sept pièces
 
-L'installation compte 8 vannes mais seulement 2 sondes d'ambiance — chambre
-de Pablo et chambre de Lolo. La cuisine emprunte celle du Lyric T6, qui s'y
-trouve. Les quatre pièces restantes n'ont aucune mesure directe. Les pièces
+L'installation compte 8 vannes mais seulement 3 sondes d'ambiance, une par
+chambre : Léo, Pablo, Lolo. La cuisine emprunte celle du Lyric T6, qui s'y
+trouve. Les trois pièces restantes — salle de bains enfants, salon,
+boulangerie — n'ont aucune mesure directe. Les pièces
 qui n'en ont pas voient leur température reprise de la **moyenne des sondes
 internes de leurs vannes**, exposée par `sensor.chauffage_temperatures`.
 
@@ -183,8 +184,8 @@ jusqu'au remplacement de la pile.
 
 C'est un correctif, pas un équivalent : le décalage est constant, alors que
 l'écart réel varie avec la puissance du radiateur. Une vraie sonde d'ambiance
-reste préférable — les pièces à équiper en priorité sont celles dont la
-consigne compte le plus : salle de bains enfants et chambre de Léo.
+reste préférable — la pièce à équiper en priorité est la salle de bains
+enfants, où la consigne de confort est la plus haute.
 
 La boulangerie dispose en plus d'un **poêle à bois**. Aucun traitement
 particulier n'est nécessaire : quand le poêle tourne, la pièce dépasse sa
@@ -468,8 +469,10 @@ et la demande chaudière. À relancer après toute modification du bloc
 - Confirmer l'affectation de deux vannes aux noms génériques :
   `climate.vt_thermostat` (supposée chambre Pablo) et
   `climate.sonoff_trvzb_thermostat` (supposée salle de bains enfants).
-- Racheter des sondes d'ambiance : chambre de Léo et salle de bains enfants
-  d'abord, puis salon et boulangerie.
+- Remettre en service la sonde `t_hr` de la chambre de Léo, qui remonte
+  encore indisponible (pile, ou réappairage ZHA sans supprimer l'appareil).
+- Racheter des sondes d'ambiance : salle de bains enfants d'abord, puis
+  salon et boulangerie.
 - En attendant, calibrer les vannes des pièces sans sonde (voir plus haut).
 - Affiner `clim_seuil_pac` avec les prix réels de l'électricité et du mazout,
   si tu actives un jour l'appoint chauffage.
