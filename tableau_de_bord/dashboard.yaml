@@ -1,0 +1,14 @@
+# Tableau de bord « Chauffage », en mode YAML.
+#
+# Home Assistant le lit directement dans ce dépôt, cloné sous
+# /config/claude-ha : aucun copier-coller dans l'interface, et un `git pull`
+# suffit à le mettre à jour. Déclaré dans configuration.yaml sous
+# `lovelace: dashboards:` (voir le README).
+title: Chauffage
+views:
+  - title: Chauffage
+    path: chauffage
+    icon: mdi:radiator
+    type: panel
+    cards:
+      - !include carte_chauffage.yaml

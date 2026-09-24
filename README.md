@@ -244,8 +244,19 @@ suivent pas la parité : `input_select.garde_enfants` permet de forcer
 3. **Remplacer les identifiants d'entités** du bloc `pieces` par les vrais
    (voir `outils/export_entites.jinja`). Ceux livrés sont des suppositions.
 4. Outils de développement > Vérifier la configuration, puis redémarrer.
-5. Ajouter la carte : tableau de bord > crayon > + Ajouter une carte >
-   Manuel, et coller `tableau_de_bord/carte_chauffage.yaml`.
+5. Déclarer le tableau de bord, lu directement dans le dépôt (aucun
+   copier-coller dans l'interface, et un `git pull` le met à jour) :
+
+   ```yaml
+   lovelace:
+     dashboards:
+       chauffage-auto:
+         mode: yaml
+         title: Chauffage
+         icon: mdi:radiator
+         show_in_sidebar: true
+         filename: claude-ha/tableau_de_bord/dashboard.yaml
+   ```
 
 ## Points de vigilance
 

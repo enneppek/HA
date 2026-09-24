@@ -25,7 +25,22 @@ homeassistant:
   packages: !include_dir_named claude-ha/packages
 ```
 
-Sauvegarde de la configuration d'origine : `/config/configuration.yaml.avant-chauffage`.
+Le tableau de bord est lui aussi lu dans le dépôt, en mode YAML, par ce
+bloc également placé en tête de `configuration.yaml` :
+
+```yaml
+lovelace:
+  dashboards:
+    chauffage-auto:
+      mode: yaml
+      title: Chauffage
+      icon: mdi:radiator
+      show_in_sidebar: true
+      filename: claude-ha/tableau_de_bord/dashboard.yaml
+```
+
+Sauvegardes : `/config/configuration.yaml.avant-chauffage` (d'origine) et
+`/config/configuration.yaml.avant-tableau` (avant l'ajout du tableau de bord).
 
 Mettre à jour après un push : dans le terminal de HA (add-on Terminal & SSH),
 `cd /config/claude-ha && git pull && ha core check && ha core restart`.
