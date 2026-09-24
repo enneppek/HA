@@ -2,7 +2,7 @@
 # Carte "Chauffage"
 #
 # Pose : tableau de bord > crayon (en haut à droite) > + Ajouter une carte >
-# Manuel, puis coller ce contenu (sans ce bandeau de commentaires).
+# Manuel, puis coller ce contenu.
 ################################################################################
 type: vertical-stack
 cards:
@@ -131,11 +131,15 @@ cards:
     content: >-
       **Consignes en cours**
 
+      {# La mesure vient du capteur agrégé et non de la sonde de la pièce :
+         trois pièces n'ont pas de sonde, et states() sur une entité absente
+         fait échouer tout le rendu de la carte. #}
       {% set c = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+      {% set t = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
       {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
       {% for piece, cible in c.items() %}
-      - {{ cfg[piece].nom }} : **{{ cible }} °C**
-      (mesure {{ states(cfg[piece].sonde) }} °C)
+      - {{ cfg.get(piece, {}).get('nom', piece) }} : **{{ cible }} °C**
+      (mesure {{ t.get(piece) if t.get(piece) is not none else '?' }} °C)
       {% endfor %}
 
   # --- Climatisation -------------------------------------------------------

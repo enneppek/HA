@@ -17,6 +17,7 @@ from jinja2 import Environment
 RACINE = __file__.rsplit('/outils/', 1)[0]
 chauffage = yaml.safe_load(open(RACINE + '/packages/chauffage.yaml', encoding='utf-8'))
 clim_pkg = yaml.safe_load(open(RACINE + '/packages/clim.yaml', encoding='utf-8'))
+carte = yaml.safe_load(open(RACINE + '/tableau_de_bord/carte_chauffage.yaml', encoding='utf-8'))
 
 
 def capteur(paquet, nom):
@@ -110,7 +111,7 @@ class Monde:
 
     def states(self, eid):
         if eid is None:
-            return 'unknown'
+            raise TypeError("states(None) : Home Assistant lève ici une erreur")
         if eid in self.reglages:
             return str(self.reglages[eid])
         if eid in PIECE_PAR_SONDE:
@@ -218,7 +219,7 @@ def templates(noeud, chemin=""):
 
 
 erreurs = 0
-for nom, paquet in (('chauffage', chauffage), ('clim', clim_pkg)):
+for nom, paquet in (('chauffage', chauffage), ('clim', clim_pkg), ('carte', carte)):
     for chemin, tpl in templates(paquet, nom):
         try:
             Environment().parse(tpl)
@@ -227,6 +228,40 @@ for nom, paquet in (('chauffage', chauffage), ('clim', clim_pkg)):
             echecs.append(chemin)
             print(f"  {ROUGE}ÉCHEC{RAZ} {chemin}\n         {e}")
 verifier("tous les templates compilent", erreurs, 0)
+
+titre("Rendu de la carte du tableau de bord")
+# La carte n'est pas chargée par Home Assistant au démarrage : une erreur
+# n'y apparaît qu'à l'affichage, sous forme de carte vide ou bloquée.
+
+
+def contenus_markdown(noeud):
+    if isinstance(noeud, dict):
+        if noeud.get('type') == 'markdown':
+            yield noeud['content']
+        for valeur in noeud.values():
+            yield from contenus_markdown(valeur)
+    elif isinstance(noeud, list):
+        for valeur in noeud:
+            yield from contenus_markdown(valeur)
+
+
+for scenario in ('maison pleine', 'maison vide'):
+    presents = ['leo', 'pablo', 'laurent'] if scenario == 'maison pleine' else []
+    m_carte = Monde(presents=presents, clim_etat='heat')
+    ok = True
+    try:
+        m_carte.temperatures = eval(rendre(TPL_TEMPS, m_carte))
+        m_carte.origine = eval(rendre(TPL_ORIGINE, m_carte))
+        m_carte.consignes = eval(rendre(TPL_CONSIGNES, m_carte))
+        m_carte.text = float(rendre(TPL_TEXT, m_carte))
+        m_carte.relais = eval(rendre(TPL_RELAIS, m_carte))
+        m_carte.ordres = eval(rendre(TPL_ORDRES, m_carte))
+        for contenu in contenus_markdown(carte):
+            rendre(contenu, m_carte)
+    except Exception as e:
+        ok = False
+        print(f"         {e}")
+    verifier(f"toutes les sections se rendent ({scenario})", ok, True)
 
 titre("Cohérence du bloc `pieces`")
 verifier("sept pièces déclarées", len(PIECES), 7)
