@@ -466,9 +466,6 @@ et la demande chaudière. À relancer après toute modification du bloc
 - Brancher les vrais identifiants d'entités (bloquant).
 - Décider de la source de présence : app Companion (GPS) pour automatiser
   les boutons, ou pilotage manuel.
-- Confirmer l'affectation de deux vannes aux noms génériques :
-  `climate.vt_thermostat` (supposée chambre Pablo) et
-  `climate.sonoff_trvzb_thermostat` (supposée salle de bains enfants).
 - Remettre en service la sonde `t_hr` de la chambre de Léo, qui remonte
   encore indisponible (pile, ou réappairage ZHA sans supprimer l'appareil).
 - Racheter des sondes d'ambiance : salle de bains enfants d'abord, puis
