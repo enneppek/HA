@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
+  <!-- Maison, chaudière en marche : soir d'hiver, fenêtres allumées,
+       fumée qui monte de la cheminée. Animations CSS internes au SVG :
+       elles jouent aussi quand l'image est affichée par une carte HA. -->
+  <defs>
+    <linearGradient id="ciel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1446"/>
+      <stop offset="0.55" stop-color="#7b2d6b"/>
+      <stop offset="1" stop-color="#f4845f"/>
+    </linearGradient>
+    <linearGradient id="mur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6e2c3"/>
+      <stop offset="1" stop-color="#e2c192"/>
+    </linearGradient>
+    <radialGradient id="halo">
+      <stop offset="0" stop-color="#ffd166" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffd166" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="vitre" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff3b0"/>
+      <stop offset="1" stop-color="#ffb347"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .fumee { fill: #f1e9f7; opacity: 0; transform-box: fill-box; transform-origin: center;
+             animation: monte 4.5s ease-in infinite; }
+    .f2 { animation-delay: 1.5s; }
+    .f3 { animation-delay: 3s; }
+    @keyframes monte {
+      0%   { transform: translate(0, 0) scale(0.5); opacity: 0; }
+      15%  { opacity: 0.85; }
+      100% { transform: translate(40px, -120px) scale(2.2); opacity: 0; }
+    }
+    .lueur { animation: pulse 2.8s ease-in-out infinite alternate; }
+    @keyframes pulse { from { opacity: 0.55; } to { opacity: 1; } }
+    .etoile { animation: scintille 2.2s ease-in-out infinite alternate; }
+    .e2 { animation-delay: 0.7s; } .e3 { animation-delay: 1.4s; }
+    @keyframes scintille { from { opacity: 0.25; } to { opacity: 1; } }
+    .chaleur { fill: none; stroke: #ffb4a2; stroke-width: 3; stroke-linecap: round;
+               stroke-dasharray: 14 10; animation: ondule 1.6s linear infinite; opacity: 0.7; }
+    @keyframes ondule { to { stroke-dashoffset: -48; } }
+  </style>
+
+  <rect width="800" height="300" fill="url(#ciel)"/>
+  <circle class="etoile" cx="90" cy="45" r="2" fill="#fff"/>
+  <circle class="etoile e2" cx="180" cy="80" r="1.6" fill="#fff"/>
+  <circle class="etoile e3" cx="620" cy="40" r="2.2" fill="#fff"/>
+  <circle class="etoile" cx="700" cy="95" r="1.5" fill="#fff"/>
+  <circle class="etoile e2" cx="540" cy="70" r="1.4" fill="#fff"/>
+  <circle cx="680" cy="60" r="22" fill="#fdf0d5" opacity="0.9"/>
+
+  <path d="M0 250 Q 200 215 400 240 T 800 235 V300 H0Z" fill="#2a1f47"/>
+  <path d="M0 270 Q 250 245 500 262 T 800 258 V300 H0Z" fill="#1c1533"/>
+
+  <polygon points="120,255 145,190 170,255" fill="#162a2e"/>
+  <polygon points="150,258 180,175 210,258" fill="#1d3a3f"/>
+  <polygon points="610,258 640,180 670,258" fill="#1d3a3f"/>
+  <polygon points="655,260 680,205 705,260" fill="#162a2e"/>
+
+  <circle class="fumee" cx="451" cy="88" r="10"/>
+  <circle class="fumee f2" cx="451" cy="88" r="10"/>
+  <circle class="fumee f3" cx="451" cy="88" r="10"/>
+
+  <ellipse class="lueur" cx="400" cy="200" rx="170" ry="80" fill="url(#halo)"/>
+  <rect x="438" y="92" width="26" height="50" fill="#7d2e3a"/>
+  <rect x="434" y="88" width="34" height="8" rx="2" fill="#5c2029"/>
+  <rect x="310" y="150" width="180" height="110" fill="url(#mur)"/>
+  <polygon points="292,156 400,82 508,156" fill="#9d3742"/>
+  <polygon points="292,156 400,82 400,96 306,158" fill="#b8434f"/>
+  <circle class="lueur" cx="400" cy="126" r="13" fill="url(#vitre)"/>
+  <rect class="lueur" x="330" y="175" width="44" height="38" rx="3" fill="url(#vitre)"/>
+  <rect class="lueur" x="426" y="175" width="44" height="38" rx="3" fill="url(#vitre)"/>
+  <path d="M352 175 V213 M330 194 H374 M448 175 V213 M426 194 H470" stroke="#8a5a2b" stroke-width="3"/>
+  <rect x="384" y="205" width="32" height="55" rx="4" fill="#6b4226"/>
+  <circle cx="409" cy="234" r="2.5" fill="#ffd166"/>
+
+  <path class="chaleur" d="M250 180 q 8 -12 0 -24 q -8 -12 0 -24"/>
+  <path class="chaleur" d="M550 180 q 8 -12 0 -24 q -8 -12 0 -24"/>
+</svg>

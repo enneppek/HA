@@ -179,21 +179,41 @@ template:
               {% set assecher = deshu_ok and (humidite > seuil_hum
                                 or (en_cours and humidite > seuil_hum - 5)) %}
               {% if temp_min_ok and mesure < temp_min %}
-                {% set ordre = {'mode': 'heat', 'temp': temp_min} %}
+                {% set ordre = {'mode': 'heat', 'temp': temp_min, 'motif': 'temp_min'} %}
               {% elif froid_ok and occupe and mesure > seuil_froid %}
-                {% set ordre = {'mode': 'cool', 'temp': consigne_ete} %}
+                {% set ordre = {'mode': 'cool', 'temp': consigne_ete, 'motif': 'froid'} %}
               {% elif chaud_ok and relais.get(p, 'radiateur') == 'clim'
                       and mesure < (cible + 0.5) %}
-                {% set ordre = {'mode': 'heat', 'temp': cible} %}
+                {% set ordre = {'mode': 'heat', 'temp': cible, 'motif': 'appoint'} %}
               {% elif assecher and mesure < temp_max %}
                 {% set ordre = {'mode': 'heat',
-                                'temp': [mesure + delta, temp_max] | min} %}
+                                'temp': [mesure + delta, temp_max] | min,
+                                'motif': 'assechement'} %}
               {% else %}
-                {% set ordre = {'mode': 'off', 'temp': 0} %}
+                {% set ordre = {'mode': 'off', 'temp': 0, 'motif': 'arret'} %}
               {% endif %}
               {% set nd.d = dict(nd.d.items() | list + [(p, ordre)]) %}
             {% endfor %}
             {{ nd.d }}
+
+  ##############################################################################
+  # Ce que fait réellement la clim, en clair. Sert à l'illustration du tableau
+  # de bord : le mode de l'appareil ne suffit pas, l'assèchement passant lui
+  # aussi par le mode chaud.
+  ##############################################################################
+  - sensor:
+      - name: "Clim rôle"
+        unique_id: clim_role
+        icon: mdi:air-conditioner
+        state: >-
+          {% if is_state('input_boolean.clim_pilotage_manuel', 'on') %}
+            Manuel
+          {% else %}
+            {% set o = (state_attr('sensor.clim_pilotage', 'ordres') or {}).values() | list %}
+            {% set motif = o[0].motif if o else 'arret' %}
+            {{ {'temp_min': 'Chauffage', 'appoint': 'Chauffage', 'froid': 'Froid',
+                'assechement': 'Assèchement'}.get(motif, 'Arrêt') }}
+          {% endif %}
 
 ################################################################################
 # 3. APPLICATION

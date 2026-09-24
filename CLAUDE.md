@@ -42,8 +42,19 @@ lovelace:
 Sauvegardes : `/config/configuration.yaml.avant-chauffage` (d'origine) et
 `/config/configuration.yaml.avant-tableau` (avant l'ajout du tableau de bord).
 
-Mettre à jour après un push : dans le terminal de HA (add-on Terminal & SSH),
-`cd /config/claude-ha && git pull && ha core check && ha core restart`.
+Mettre à jour après un push, dans le terminal de HA (add-on Terminal & SSH) :
+
+```bash
+cd /config/claude-ha && git pull
+mkdir -p /config/www/chauffage && cp tableau_de_bord/images/*.svg /config/www/chauffage/
+ha core check && ha core restart
+```
+
+La copie des images est nécessaire : HA ne sert en `/local/` que le dossier
+`/config/www`, et refuse d'y suivre un lien symbolique vers le dépôt. Si une
+image change, incrémenter `?v=` dans `dashboard.yaml` pour contourner le
+cache du navigateur. Une modification du seul tableau de bord ne demande pas
+de redémarrage : rafraîchir la page suffit.
 Depuis ce PC, on ne peut pas faire le `git pull` côté HA ; on peut en revanche
 vérifier et recharger par l'API :
 

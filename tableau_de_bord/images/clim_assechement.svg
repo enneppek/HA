@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">
+  <!-- Clim en assèchement : l'humidité est aspirée. -->
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e6fcf5"/>
+      <stop offset="1" stop-color="#8ce99a"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .voyant { animation: voyant 2s ease-in-out infinite alternate; }
+    @keyframes voyant { from { opacity: 0.45; } to { opacity: 1; } }
+    .flux { fill: none; stroke: #ffa94d; stroke-width: 5; stroke-linecap: round;
+             stroke-dasharray: 12 14; animation: souffle 1.2s linear infinite; opacity: 0.45; }
+    .f2 { animation-delay: 0.3s; } .f3 { animation-delay: 0.6s; }
+    @keyframes souffle { to { stroke-dashoffset: -52; } }
+    .goutte { transform-box: fill-box; transform-origin: center; opacity: 0;
+              animation: aspire 3.2s ease-in infinite; }
+    @keyframes aspire {
+      0%   { transform: translateY(0) scale(1); opacity: 0; }
+      20%  { opacity: 0.95; }
+      100% { transform: translateY(-78px) scale(0.3); opacity: 0; }
+    }
+  </style>
+  <rect width="400" height="200" fill="url(#fond)"/>
+  <path class="flux" d="M140 92 C 128 120, 152 142, 136 178"/>
+  <path class="flux f2" d="M200 92 C 188 120, 212 142, 196 178"/>
+  <path class="flux f3" d="M260 92 C 248 120, 272 142, 256 178"/>
+  <path class="goutte" style="animation-delay:0s" d="M120 160 c 6 8 9 13 9 18 a 9 9 0 0 1 -18 0 c 0 -5 3 -10 9 -18 z" fill="#20c997"/>
+  <path class="goutte" style="animation-delay:1.2s" d="M175 160 c 6 8 9 13 9 18 a 9 9 0 0 1 -18 0 c 0 -5 3 -10 9 -18 z" fill="#20c997"/>
+  <path class="goutte" style="animation-delay:0.6s" d="M230 160 c 6 8 9 13 9 18 a 9 9 0 0 1 -18 0 c 0 -5 3 -10 9 -18 z" fill="#20c997"/>
+  <path class="goutte" style="animation-delay:1.9s" d="M285 160 c 6 8 9 13 9 18 a 9 9 0 0 1 -18 0 c 0 -5 3 -10 9 -18 z" fill="#20c997"/>
+  <ellipse cx="200" cy="100" rx="150" ry="10" fill="#000" opacity="0.06"/>
+  <rect x="70" y="30" width="260" height="64" rx="16" fill="#fdfdfd" stroke="#d6dde4" stroke-width="2"/>
+  <rect x="84" y="40" width="190" height="4" rx="2" fill="#e9eef2"/>
+  <rect x="95" y="80" width="210" height="7" rx="3.5" fill="#aab5bf"/>
+  <circle class="voyant" cx="305" cy="50" r="5" fill="#12b886"/>
+</svg>

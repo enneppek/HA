@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300">
+  <!-- Maison, chaudière au repos : nuit calme et fraîche, pas de fumée,
+       fenêtres sombres. Seules les étoiles scintillent. -->
+  <defs>
+    <linearGradient id="ciel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1a2e"/>
+      <stop offset="0.6" stop-color="#1f3b5a"/>
+      <stop offset="1" stop-color="#4a6f8f"/>
+    </linearGradient>
+    <linearGradient id="mur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9d6e3"/>
+      <stop offset="1" stop-color="#a7b8c9"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .etoile { animation: scintille 2.6s ease-in-out infinite alternate; }
+    .e2 { animation-delay: 0.9s; } .e3 { animation-delay: 1.7s; }
+    @keyframes scintille { from { opacity: 0.2; } to { opacity: 0.9; } }
+  </style>
+
+  <rect width="800" height="300" fill="url(#ciel)"/>
+  <circle class="etoile" cx="90" cy="45" r="2" fill="#fff"/>
+  <circle class="etoile e2" cx="180" cy="80" r="1.6" fill="#fff"/>
+  <circle class="etoile e3" cx="620" cy="40" r="2.2" fill="#fff"/>
+  <circle class="etoile" cx="700" cy="95" r="1.5" fill="#fff"/>
+  <circle class="etoile e2" cx="540" cy="70" r="1.4" fill="#fff"/>
+  <circle class="etoile e3" cx="300" cy="35" r="1.8" fill="#fff"/>
+  <circle cx="680" cy="60" r="22" fill="#e8f1f8"/>
+  <circle cx="690" cy="54" r="20" fill="#1f3b5a" opacity="0.35"/>
+
+  <path d="M0 250 Q 200 215 400 240 T 800 235 V300 H0Z" fill="#1b2d40"/>
+  <path d="M0 270 Q 250 245 500 262 T 800 258 V300 H0Z" fill="#12202e"/>
+
+  <polygon points="120,255 145,190 170,255" fill="#0f2a2a"/>
+  <polygon points="150,258 180,175 210,258" fill="#153636"/>
+  <polygon points="610,258 640,180 670,258" fill="#153636"/>
+  <polygon points="655,260 680,205 705,260" fill="#0f2a2a"/>
+
+  <rect x="438" y="92" width="26" height="50" fill="#4f5d6b"/>
+  <rect x="434" y="88" width="34" height="8" rx="2" fill="#3d4854"/>
+  <rect x="310" y="150" width="180" height="110" fill="url(#mur)"/>
+  <polygon points="292,156 400,82 508,156" fill="#5a6b7d"/>
+  <polygon points="292,156 400,82 400,96 306,158" fill="#6c7f92"/>
+  <circle cx="400" cy="126" r="13" fill="#2c4058"/>
+  <rect x="330" y="175" width="44" height="38" rx="3" fill="#2c4058"/>
+  <rect x="426" y="175" width="44" height="38" rx="3" fill="#2c4058"/>
+  <path d="M352 175 V213 M330 194 H374 M448 175 V213 M426 194 H470" stroke="#8796a6" stroke-width="3"/>
+  <rect x="384" y="205" width="32" height="55" rx="4" fill="#4a5968"/>
+  <circle cx="409" cy="234" r="2.5" fill="#c9d6e3"/>
+</svg>

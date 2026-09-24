@@ -40,6 +40,7 @@ TPL_RELAIS = capteur(chauffage, 'Chauffage relais')['attributes']['relais']
 TPL_DEMANDE = capteur(chauffage, 'Chauffage demande chaudière')['state']
 TPL_CHAUDIERE = capteur(chauffage, 'Chauffage consigne chaudière')['state']
 TPL_ORDRES = capteur(clim_pkg, 'Clim pilotage')['attributes']['ordres']
+TPL_ROLE = capteur(clim_pkg, 'Clim rôle')['state']
 
 
 def rendre_brut(tpl, globals_=None):
@@ -304,6 +305,48 @@ for c in PIECES.values():
 connues |= {'climate.thermostat_thermostat', 'schedule.chauffage_commun'}
 inconnues = sorted(set(entites_referencees(carte)) - connues)
 verifier("toutes les entités de la carte existent", inconnues, [])
+
+import os
+import re
+
+images = set(re.findall(r"/local/chauffage/([\w.-]+\.svg)", open(
+    RACINE + '/tableau_de_bord/dashboard.yaml', encoding='utf-8').read()))
+manquantes = sorted(i for i in images
+                    if not os.path.exists(f"{RACINE}/tableau_de_bord/images/{i}"))
+verifier("chaque image citée existe dans tableau_de_bord/images", manquantes, [])
+
+
+def cles_state_image(noeud):
+    if isinstance(noeud, dict):
+        if isinstance(noeud.get('state_image'), dict):
+            yield from noeud['state_image'].keys()
+        for valeur in noeud.values():
+            yield from cles_state_image(valeur)
+    elif isinstance(noeud, list):
+        for valeur in noeud:
+            yield from cles_state_image(valeur)
+
+
+# Sans guillemets, `on:` et `off:` sont lus comme des booléens par le YAML de
+# Home Assistant, et l'image ne change jamais.
+verifier("toutes les clés de state_image sont des textes",
+         [k for k in cles_state_image(carte) if not isinstance(k, str)], [])
+
+titre("Clim : rôle affiché sur le tableau de bord")
+m = evaluer(Monde(presents=['laurent'], semaine=41, temps={'chambre_laurent': 19.0},
+                  humidites={'chambre_laurent': 72.0}))
+verifier("humidité trop haute -> « Assèchement » (et non Chauffage)",
+         rendre(TPL_ROLE, m), 'Assèchement')
+m = evaluer(Monde(presents=[], semaine=40, temps={'chambre_laurent': 9.0}))
+verifier("pièce trop froide -> « Chauffage »", rendre(TPL_ROLE, m), 'Chauffage')
+m = evaluer(Monde(presents=['laurent'], semaine=41, temps={'chambre_laurent': 19.0},
+                  humidites={'chambre_laurent': 50.0}))
+verifier("rien à faire -> « Arrêt »", rendre(TPL_ROLE, m), 'Arrêt')
+m = evaluer(Monde(presents=['laurent'], semaine=41, manuel=True))
+verifier("pilotage manuel -> « Manuel »", rendre(TPL_ROLE, m), 'Manuel')
+roles = {k for k in cles_state_image(carte)} - {'on', 'off'}
+verifier("chaque rôle possible a son image",
+         {'Chauffage', 'Assèchement', 'Froid', 'Arrêt', 'Manuel'} <= roles, True)
 
 titre("Cohérence du bloc `pieces`")
 verifier("sept pièces déclarées", len(PIECES), 7)

@@ -125,6 +125,7 @@ résultat dans `inventaire.md`.
 packages/chauffage.yaml            Chauffage : consignes, arbitrage, chaudière
 packages/clim.yaml                 Climatisation Panasonic
 tableau_de_bord/dashboard.yaml      Tableau de bord, lu par HA en mode YAML
+tableau_de_bord/images/            Illustrations SVG animées
 outils/export_entites.jinja        Modèle d'export des entités
 outils/test_logique.py             Banc d'essai de la logique
 ```
@@ -230,6 +231,20 @@ suivent pas la parité : `input_select.garde_enfants` permet de forcer
 **Présents** ou **Absents** sans toucher au YAML.
 
 ### Le tableau de bord
+
+Uniquement des cartes natives de Home Assistant, sans extension : vue en
+sections, pastilles d'état en haut de page, cadrans de température colorés,
+tuiles à boutons +/−, courbes sur 24 h. Deux illustrations animées suivent
+l'état réel : la maison (fumée et fenêtres éclairées quand la chaudière
+tourne) et la clim (souffle chaud, flocons ou gouttes aspirées selon son
+rôle). Ce sont des SVG animés, rangés dans `tableau_de_bord/images/` et
+copiés dans `/config/www/chauffage/` lors de chaque mise à jour :
+
+```bash
+cd /config/claude-ha && git pull
+mkdir -p /config/www/chauffage && cp tableau_de_bord/images/*.svg /config/www/chauffage/
+ha core check && ha core restart
+```
 
 - **Vue d'ensemble** — pour chaque pièce : mesure, consigne en cours, et
   horaire suivi (commun ou propre), avec son état.

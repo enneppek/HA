@@ -411,8 +411,168 @@ template:
              if is_state('binary_sensor.chauffage_demande_chaudiere', 'on')
              else states('input_number.chaudiere_consigne_arret') | float(default=10) }}
 
+  ##############################################################################
+  # 8. UN CAPTEUR PAR PIÈCE, pour le tableau de bord
+  #
+  # Les cadrans et les courbes ont besoin d'une entité par grandeur, là où les
+  # capteurs ci-dessus regroupent toutes les pièces dans un attribut. Ces
+  # capteurs n'en sont que la projection ; `state_class: measurement` ouvre
+  # en plus l'historique long terme. Le nom, tiré de la clé de la pièce, fixe
+  # l'identifiant : les cartes affichent leur propre libellé.
+  ##############################################################################
+  - sensor:
+      - name: "Chauffage chambre leo température"
+        unique_id: chauffage_chambre_leo_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('chambre_leo') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('chambre_leo') }}
+      - name: "Chauffage chambre pablo température"
+        unique_id: chauffage_chambre_pablo_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('chambre_pablo') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('chambre_pablo') }}
+      - name: "Chauffage sdb enfants température"
+        unique_id: chauffage_sdb_enfants_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('sdb_enfants') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('sdb_enfants') }}
+      - name: "Chauffage chambre laurent température"
+        unique_id: chauffage_chambre_laurent_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('chambre_laurent') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('chambre_laurent') }}
+      - name: "Chauffage boulangerie température"
+        unique_id: chauffage_boulangerie_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('boulangerie') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('boulangerie') }}
+      - name: "Chauffage cuisine température"
+        unique_id: chauffage_cuisine_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('cuisine') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('cuisine') }}
+      - name: "Chauffage salon température"
+        unique_id: chauffage_salon_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('salon') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_temperatures', 'temperatures') or {})
+             .get('salon') }}
+      - name: "Chauffage chambre leo consigne"
+        unique_id: chauffage_chambre_leo_consigne
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        icon: mdi:thermostat
+        availability: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('chambre_leo') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('chambre_leo') }}
+      - name: "Chauffage chambre pablo consigne"
+        unique_id: chauffage_chambre_pablo_consigne
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        icon: mdi:thermostat
+        availability: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('chambre_pablo') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('chambre_pablo') }}
+      - name: "Chauffage sdb enfants consigne"
+        unique_id: chauffage_sdb_enfants_consigne
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        icon: mdi:thermostat
+        availability: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('sdb_enfants') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('sdb_enfants') }}
+      - name: "Chauffage boulangerie consigne"
+        unique_id: chauffage_boulangerie_consigne
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        icon: mdi:thermostat
+        availability: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('boulangerie') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('boulangerie') }}
+      - name: "Chauffage cuisine consigne"
+        unique_id: chauffage_cuisine_consigne
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        icon: mdi:thermostat
+        availability: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('cuisine') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('cuisine') }}
+      - name: "Chauffage salon consigne"
+        unique_id: chauffage_salon_consigne
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        icon: mdi:thermostat
+        availability: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('salon') is not none }}
+        state: >-
+          {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+             .get('salon') }}
+
 ################################################################################
-# 8. HORAIRE — semaines impaires et présence
+# 9. HORAIRE — semaines impaires et présence
 # Modifiable ensuite dans l'interface : Paramètres > Appareils et services >
 # Entrées > Planifications.
 ################################################################################
@@ -441,7 +601,7 @@ schedule:
         to: "22:00:00"
 
 ################################################################################
-# 9. COMMANDES — présence, confort par pièce, mode de garde
+# 10. COMMANDES — présence, confort par pièce, mode de garde
 ################################################################################
 input_boolean:
   chauffage_reglages_initialises:
@@ -639,7 +799,7 @@ input_number:
     unit_of_measurement: min
 
 ################################################################################
-# 10. AUTOMATISATIONS
+# 11. AUTOMATISATIONS
 ################################################################################
 automation:
   ##############################################################################
