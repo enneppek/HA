@@ -82,6 +82,7 @@ class Monde:
         'input_number.clim_seuil_froid': 26,
         'input_number.clim_consigne_ete': 25,
         'input_select.clim_duree_assechement': '1 h',
+        'input_number.clim_consigne_horaire': 19,
         'input_number.clim_temp_min': 15,
         'input_number.chaudiere_consigne_marche': 24,
         'input_number.chaudiere_consigne_arret': 10,
@@ -90,7 +91,7 @@ class Monde:
     def __init__(self, presents=(), horaire=True, boosts=(), temps=None,
                  humidites=None, semaine=41, exterieur=12.0,
                  clim_froid=False, clim_chaud=False, assechement=False,
-                 temp_min=True, manuel=False, clim_etat='off',
+                 temp_min=True, clim_etat='off', clim_consigne=24.0, dernier='',
                  sondes_indispo=(), reglages=None, horaires=None, depuis=None,
                  grilles=None):
         # Valeurs par défaut conformes à l'installation : maintien d'une
@@ -109,7 +110,9 @@ class Monde:
         self.depuis = depuis or {}
         # Contenu des planifications, tel que le range sensor.chauffage_horaires.
         self.grilles = grilles
-        self.temp_min, self.manuel, self.clim_etat = temp_min, manuel, clim_etat
+        self.temp_min, self.clim_etat, self.clim_consigne = temp_min, clim_etat, clim_consigne
+        # Mémoire du dernier ordre de HA (input_text.clim_dernier_ordre).
+        self.dernier = dernier
         self.sondes_indispo = set(sondes_indispo)
         self.reglages = {**self.REGLAGES, **(reglages or {})}
         # Planifications créées dans l'interface : {entité: 'on' | 'off'}.
@@ -151,8 +154,8 @@ class Monde:
             return self.horaires.get(eid, 'unknown')
         if eid == 'input_boolean.clim_maintien_temp_min':
             return 'on' if self.temp_min else 'off'
-        if eid == 'input_boolean.clim_pilotage_manuel':
-            return 'on' if self.manuel else 'off'
+        if eid == 'input_text.clim_dernier_ordre':
+            return self.dernier
         if eid == 'input_boolean.clim_assechement':
             return 'on' if self.assechement else 'off'
         if eid.startswith('input_boolean.clim_auto_'):
@@ -171,6 +174,8 @@ class Monde:
         # de sonde d'ambiance.
         if eid in PIECE_PAR_VANNE and attr == 'current_temperature':
             return self.temp_piece(PIECE_PAR_VANNE[eid])
+        if eid in PIECE_PAR_CLIM and attr == 'temperature':
+            return self.clim_consigne
         return {
             ('sensor.chauffage_configuration', 'pieces'): self.pieces,
             ('sensor.chauffage_temperatures', 'temperatures'): self.temperatures,
@@ -343,14 +348,16 @@ def entites_referencees(noeud):
 
 connues = set()
 for paquet in (chauffage, clim_pkg):
-    for domaine in ('input_boolean', 'input_number', 'input_select', 'schedule'):
+    for domaine in ('input_boolean', 'input_number', 'input_select', 'input_text', 'schedule'):
         connues |= {f"{domaine}.{cle}" for cle in (paquet.get(domaine) or {})}
     for bloc in paquet.get('template', []):
         for domaine in ('sensor', 'binary_sensor'):
             connues |= {f"{domaine}.{slug(c['name'])}" for c in bloc.get(domaine, [])}
 for c in PIECES.values():
     connues |= set(c['vannes']) | {c['sonde'], c['humidite'], c['clim']} - {None}
-connues |= {'climate.thermostat_thermostat', 'schedule.chauffage_commun'}
+# Planifications créées dans l'interface par Laurent.
+connues |= {'climate.thermostat_thermostat', 'schedule.chauffage_commun',
+            'schedule.clim_chambre'}
 inconnues = sorted(set(entites_referencees(carte)) - connues)
 verifier("toutes les entités de la carte existent", inconnues, [])
 
@@ -390,8 +397,12 @@ verifier("pièce trop froide -> « Chauffage »", rendre(TPL_ROLE, m), 'Chauffag
 m = evaluer(Monde(presents=['laurent'], semaine=41, temps={'chambre_laurent': 19.0},
                   humidites={'chambre_laurent': 50.0}))
 verifier("rien à faire -> « Arrêt »", rendre(TPL_ROLE, m), 'Arrêt')
-m = evaluer(Monde(presents=['laurent'], semaine=41, manuel=True))
-verifier("pilotage manuel -> « Manuel »", rendre(TPL_ROLE, m), 'Manuel')
+m = evaluer(Monde(presents=['laurent'], semaine=41, clim_etat='heat',
+                  temps={'chambre_laurent': 19.0}))
+verifier("clim en marche sans raison pour HA -> « Manuel »", rendre(TPL_ROLE, m), 'Manuel')
+m = evaluer(Monde(presents=['laurent'], semaine=41, temps={'chambre_laurent': 19.0},
+                  horaires={'schedule.clim_chambre': 'on'}))
+verifier("horaire de la clim actif -> « Chauffage »", rendre(TPL_ROLE, m), 'Chauffage')
 roles = {k for k in cles_state_image(carte)} - {'on', 'off'}
 verifier("chaque rôle possible a son image",
          {'Chauffage', 'Assèchement', 'Froid', 'Arrêt', 'Manuel'} <= roles, True)
@@ -697,32 +708,85 @@ verifier("pièce à 9° : l'assèchement (24°) couvre aussi le minimum",
 pilotage = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_pilotage_automatique')
 verifier("un appui pendant une exécution n'est pas ignoré (mode restart)",
          pilotage['mode'], 'restart')
-garde_mode = pilotage['action'][1]['repeat']['sequence'][1]['if'][0]['value_template']
+TPL_DECISION = pilotage['action'][1]['repeat']['sequence'][0]['variables']['decision']
 
 
-def changement_autorise(declencheur, minutes, etat='heat', voulu='off'):
-    m = Monde(clim_etat=etat, depuis={'climate.clim_chambre': minutes})
-    return rendre_brut(garde_mode, {'states': Etats(m), 'now': m.now,
-                                    'clim': 'climate.clim_chambre',
-                                    'ordre': {'mode': voulu},
-                                    'trigger': {'id': declencheur}})
+def decision(motif, etat, consigne, dernier='', declencheur='horloge',
+             clim_depuis=30, ordre_depuis=30, temp=None):
+    """Ce que fait l'automatisation pour un ordre voulu et un état de la clim."""
+    voulu = {'arret': ('off', 0), 'assechement': ('heat', 24.0), 'horaire': ('heat', 19.0),
+             'temp_min': ('heat', 15.0)}[motif]
+    m = Monde(clim_etat=etat, clim_consigne=consigne, dernier=dernier,
+              depuis={'climate.clim_chambre': clim_depuis,
+                      'input_text.clim_dernier_ordre': ordre_depuis})
+    return rendre_brut(TPL_DECISION, {
+        'states': Etats(m), 'state_attr': m.state_attr, 'now': m.now,
+        'clim': 'climate.clim_chambre', 'trigger': {'id': declencheur},
+        'ordre': {'mode': voulu[0], 'temp': temp or voulu[1], 'motif': motif}})
 
 
-verifier("arrêt demandé 1 min après le lancement : envoyé tout de suite",
-         changement_autorise('commande', 1), 'True')
-verifier("vérification périodique 1 min après un changement : retenue",
-         changement_autorise('horloge', 1), 'False')
-verifier("vérification périodique 6 min après : envoyée",
-         changement_autorise('horloge', 6), 'True')
-verifier("clim déjà dans l'état voulu : rien n'est envoyé",
-         changement_autorise('commande', 1, etat='off', voulu='off'), 'False')
+titre("Clim — Laurent la pilote librement")
+verifier("allumée par Laurent, HA sans raison d'agir : on n'y touche pas",
+         decision('arret', 'heat', 21.0), 'rien')
+verifier("éteinte, HA sans raison d'agir : rien", decision('arret', 'off', 24.0), 'rien')
+verifier("allumée par HA, sa raison disparaît : il l'éteint",
+         decision('arret', 'heat', 24.0, 'heat|24.0|assechement'), 'arreter')
+verifier("allumée par HA puis modifiée par Laurent : HA l'oublie sans l'éteindre",
+         decision('arret', 'heat', 21.0, 'heat|24.0|assechement'), 'liberer')
+verifier("arrêt demandé juste après le lancement, clim pas encore à jour : éteinte quand même",
+         decision('arret', 'off', 24.0, 'heat|24.0|assechement', 'commande', ordre_depuis=0.5),
+         'arreter')
+verifier("vérification périodique juste après un changement : attend",
+         decision('arret', 'heat', 24.0, 'heat|24.0|horaire', 'horloge', clim_depuis=1), 'rien')
+verifier("commande de Laurent juste après un changement : immédiate",
+         decision('arret', 'heat', 24.0, 'heat|24.0|assechement', 'commande', clim_depuis=1),
+         'arreter')
 
-debut_assechement = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_assechement_debut')
-verifier("appuyer sur le bouton reprend la main sur le pilotage manuel",
-         debut_assechement['action'][0]['target']['entity_id'],
-         'input_boolean.clim_pilotage_manuel')
-verifier("  -> à l'arrêt comme au lancement",
-         sorted(debut_assechement['trigger'][0]['to']), ['off', 'on'])
+titre("Clim — HA intervient quand il a une raison")
+verifier("assèchement demandé, clim éteinte : HA commande",
+         decision('assechement', 'off', 22.0), 'commander')
+verifier("début de l'horaire, clim éteinte : HA commande",
+         decision('horaire', 'off', 22.0), 'commander')
+verifier("horaire, clim déjà conforme : HA prend simplement la main",
+         decision('horaire', 'heat', 19.0), 'commander')
+
+titre("Clim — reprise en main pendant une période")
+verifier("pendant l'horaire, Laurent passe à 21 : HA lui laisse la main",
+         decision('horaire', 'heat', 21.0, 'heat|19.0|horaire'), 'ceder')
+verifier("  -> et ne revient pas dessus jusqu'à la fin de la plage",
+         decision('horaire', 'heat', 21.0, 'manuel|0|horaire'), 'rien')
+verifier("  -> fin de la plage : HA oublie, sans éteindre ce que Laurent a réglé",
+         decision('arret', 'heat', 21.0, 'manuel|0|horaire'), 'liberer')
+verifier("reprise pendant l'horaire, puis assèchement demandé : l'assèchement l'emporte",
+         decision('assechement', 'heat', 21.0, 'manuel|0|horaire'), 'commander')
+verifier("minimum : Laurent chauffe déjà au-dessus, HA ne s'en mêle pas",
+         decision('temp_min', 'heat', 20.0), 'rien')
+verifier("minimum : Laurent coupe la clim sous 15 °C, HA la relance (gel)",
+         decision('temp_min', 'off', 20.0, 'heat|15.0|temp_min'), 'commander')
+
+titre("Clim — horaire et minimum dans la décision")
+m = evaluer(Monde(presents=['laurent'], semaine=41, temps={'chambre_laurent': 18.0},
+                  horaires={'schedule.clim_chambre': 'on'}))
+verifier("horaire actif, Lolo là : chauffe à la consigne horaire",
+         (m.ordres['chambre_laurent']['motif'], m.ordres['chambre_laurent']['temp']),
+         ('horaire', 19.0))
+m = evaluer(Monde(presents=[], semaine=41, temps={'chambre_laurent': 18.0},
+                  horaires={'schedule.clim_chambre': 'on'}))
+verifier("horaire actif, Lolo absent : pas de chauffe",
+         m.ordres['chambre_laurent']['motif'], 'arret')
+m = evaluer(Monde(presents=['laurent'], semaine=41, assechement=True,
+                  temps={'chambre_laurent': 18.0}, horaires={'schedule.clim_chambre': 'on'}))
+verifier("assèchement pendant l'horaire : l'assèchement l'emporte",
+         m.ordres['chambre_laurent']['motif'], 'assechement')
+m = evaluer(Monde(presents=[], semaine=40, temps={'chambre_laurent': 15.5},
+                  dernier='heat|15.0|temp_min'))
+verifier("minimum lancé par HA, pièce à 15,5° : continue (hystérésis)",
+         m.ordres['chambre_laurent']['motif'], 'temp_min')
+m = evaluer(Monde(presents=[], semaine=40, temps={'chambre_laurent': 15.5}))
+verifier("pièce à 15,5° sans chauffe en cours : rien", m.ordres['chambre_laurent']['motif'], 'arret')
+m = evaluer(Monde(presents=[], semaine=40, temps={'chambre_laurent': 16.2},
+                  dernier='heat|15.0|temp_min'))
+verifier("minimum lancé par HA, pièce à 16,2° : s'arrête", m.ordres['chambre_laurent']['motif'], 'arret')
 
 fin_assechement = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_assechement_fin')
 garde_fin = fin_assechement['condition'][1]['value_template']
@@ -739,7 +803,7 @@ verifier("durée 1 h, lancé il y a 60 min : s'arrête", fin_atteinte('1 h', 60)
 verifier("durée 2 h, lancé il y a 90 min : continue", fin_atteinte('2 h', 90), 'False')
 verifier("durée 2 h, lancé il y a 120 min : s'arrête", fin_atteinte('2 h', 120), 'True')
 
-titre("Clim — température minimale, prioritaire sur tout")
+titre("Clim — température minimale")
 m = evaluer(Monde(presents=[], semaine=40, temps={'chambre_laurent': 9.0}))
 verifier("pièce vide à 9° : chauffe malgré l'absence",
          m.ordres['chambre_laurent']['mode'], 'heat')

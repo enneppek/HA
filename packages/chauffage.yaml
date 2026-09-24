@@ -78,6 +78,7 @@ template:
                   'humidite': 'sensor.sonoff_snzb_02d_humidite',
                   'occupants': ['laurent'],
                   'clim': 'climate.clim_chambre',
+                  'horaire_clim': 'schedule.clim_chambre',
                   'confort': 19.5, 'nuit': 17.0, 'absence': 15.0
                 },
                 'boulangerie': {
@@ -593,7 +594,7 @@ template:
       - variables:
           cibles: >-
             {{ states.schedule | map(attribute='entity_id')
-               | select('match', 'schedule.chauffage') | list }}
+               | select('match', 'schedule.(chauffage|clim)') | list }}
       - service: schedule.get_schedule
         target:
           entity_id: "{{ cibles }}"
@@ -1176,7 +1177,7 @@ automation:
             - {entite: input_number.chaudiere_consigne_arret, valeur: 10}
             - {entite: input_number.duree_confort, valeur: 120}
             - {entite: input_number.clim_temp_min, valeur: 15}
-            - {entite: input_number.clim_duree_manuel, valeur: 180}
+            - {entite: input_number.clim_consigne_horaire, valeur: 19}
             - {entite: input_number.clim_seuil_froid, valeur: 26}
             - {entite: input_number.clim_consigne_ete, valeur: 25}
             - {entite: input_number.clim_seuil_pac, valeur: 5}

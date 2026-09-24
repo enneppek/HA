@@ -158,16 +158,20 @@ views:
                               ['thursday', 'Jeu'], ['friday', 'Ven'], ['saturday', 'Sam'],
                               ['sunday', 'Dim']] %}
               {% set propres = g.keys() | reject('eq', 'schedule.chauffage_commun')
-                               | reject('eq', 'schedule.chauffage') | sort | list %}
-              {% set ordre = ['schedule.chauffage_commun'] + propres + ['schedule.chauffage'] %}
+                               | reject('eq', 'schedule.chauffage')
+                               | reject('eq', 'schedule.clim_chambre') | sort | list %}
+              {% set ordre = ['schedule.chauffage_commun'] + propres
+                             + ['schedule.chauffage', 'schedule.clim_chambre'] %}
               {%- for e in ordre if e in g %}
               {%- set np = namespace(l=[]) %}
               {%- for p, h in suivis.items() if h == e and rel.get(p) != 'clim' %}
               {%- set np.l = np.l + [cfg.get(p, {}).get('nom', p)] %}
               {%- endfor %}
+              {%- if e == 'schedule.clim_chambre' %}{% set np.l = ['Chambre Lolo (clim)'] %}{% endif %}
               {%- if np.l %}
               {%- set titre = 'Horaire commun' if e == 'schedule.chauffage_commun'
-                    else ('Horaire de secours' if e == 'schedule.chauffage' else 'Horaire propre') %}
+                    else ('Horaire de secours' if e == 'schedule.chauffage'
+                    else ('Horaire de la clim' if e == 'schedule.clim_chambre' else 'Horaire propre')) %}
 
               **{{ titre }}** : {{ np.l | join(', ') }}
 
@@ -212,6 +216,7 @@ views:
               | Boulangerie | `Chauffage boulangerie` |
               | Cuisine | `Chauffage cuisine` |
               | Salon | `Chauffage salon` |
+              | Clim, chambre Lolo | `Clim chambre` |
           # Bouton sans entité : il doit rester cliquable avant même que
           # l'horaire commun n'existe, puisqu'il sert à le créer.
           - type: button
@@ -638,9 +643,26 @@ views:
               "Assèchement": /local/chauffage/clim_assechement.svg?v=1
               "Froid": /local/chauffage/clim_froid.svg?v=1
               "Arrêt": /local/chauffage/clim_arret.svg?v=1
-              "Manuel": /local/chauffage/clim_arret.svg?v=1
+              "Manuel": /local/chauffage/clim_chauffage.svg?v=1
             tap_action:
               action: more-info
+              entity: climate.clim_chambre
+            grid_options:
+              columns: full
+          # Commande directe, comme dans l'Aperçu. Home Assistant ne défait
+          # pas ce qui est réglé ici : il n'éteint que ce qu'il a allumé.
+          - type: thermostat
+            entity: climate.clim_chambre
+            name: Clim chambre
+            features:
+              - type: climate-hvac-modes
+                hvac_modes:
+                  - "off"
+                  - heat_cool
+                  - cool
+                  - dry
+                  - fan_only
+                  - heat
             grid_options:
               columns: full
           - type: gauge
@@ -716,6 +738,26 @@ views:
               💧 **Assèchement en cours** : clim en chauffage à 24 °C
               jusqu'à **{{ (debut + heures * 3600) | timestamp_custom('%H:%M') }}**.
               Appuie de nouveau sur « Assécher la chambre » pour arrêter avant.
+          # --- Horaire de la clim ----------------------------------------
+          - type: tile
+            entity: schedule.clim_chambre
+            name: Horaire de la clim
+            icon: mdi:calendar-clock
+            color: green
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: input_number.clim_consigne_horaire
+            name: Consigne horaire
+            icon: mdi:thermometer
+            color: deep-orange
+            features_position: bottom
+            features:
+              - type: numeric-input
+                style: buttons
+            grid_options:
+              columns: 6
+          # --- Minimum ---------------------------------------------------
           - type: tile
             entity: input_number.clim_temp_min
             name: Température minimale
@@ -736,15 +778,16 @@ views:
               action: toggle
             grid_options:
               columns: 6
-          - type: tile
-            entity: input_boolean.clim_pilotage_manuel
-            name: Pilotage manuel
-            icon: mdi:hand-back-right
-            color: grey
-            tap_action:
-              action: toggle
+          - type: markdown
             grid_options:
               columns: full
+            content: |
+              Pilote la clim librement : ici, à la télécommande ou dans l'appli.
+              Home Assistant n'intervient que pour l'**assèchement**, l'**horaire**
+              (si tu es là) et le **minimum** ; il n'éteint que ce qu'il a allumé.
+              Si tu la règles pendant l'horaire, il te la laisse jusqu'à la fin
+              de la plage. Pour créer l'horaire : planification nommée
+              `Clim chambre`.
 
       # --- Courbes ----------------------------------------------------------
       - type: grid
@@ -826,8 +869,6 @@ views:
                 name: Clim - rafraîchissement l'été
               - entity: input_boolean.clim_auto_chaud
                 name: Clim - appoint chauffage
-              - entity: input_number.clim_duree_manuel
-                name: Clim - durée du pilotage manuel
               - entity: input_number.clim_seuil_froid
                 name: Clim - déclenchement du froid
               - entity: input_number.clim_consigne_ete

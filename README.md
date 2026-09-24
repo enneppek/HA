@@ -452,16 +452,44 @@ l'inertie réelle de l'installation.
 ## Climatisation Panasonic — chambre de Lolo
 
 Cette pièce **n'a aucun radiateur**. La clim y est l'unique source de
-chaleur. Elle fait deux choses, et rien d'autre :
+chaleur.
 
-| Rôle | Déclenchement | Action |
+### Principe : Laurent pilote, Home Assistant n'éteint que ce qu'il a allumé
+
+La clim se pilote librement, d'où l'on veut : thermostat du tableau de bord,
+télécommande, application Panasonic. Home Assistant n'intervient que pour
+une raison précise :
+
+| Priorité | Raison | Action |
 |---|---|---|
-| Température minimale | automatique, si la sonde Sonoff passe sous le seuil | chaud, jusqu'à `input_number.clim_temp_min` (15 °C) |
-| Assèchement | **uniquement sur demande**, bouton « Assécher la chambre » | chaud à **24 °C** pendant 1 h ou 2 h, au choix |
+| 1 | Assèchement demandé (bouton) | chaud à **24 °C**, 1 h ou 2 h |
+| 2 | Horaire de la clim actif, **Lolo présent** | chaud à la consigne horaire (19 °C) |
+| 3 | Chambre sous la température minimale | chaud jusqu'au minimum (15 °C) |
+| 4 | Rafraîchissement activé (désactivé par défaut) | froid |
+| 5 | Appoint chauffage activé (désactivé par défaut) | chaud |
 
-Le maintien du minimum se désactive par `input_boolean.clim_maintien_temp_min`.
-Le rafraîchissement d'été et l'appoint chauffage existent, mais sont
-**désactivés par défaut** : ce sont deux interrupteurs dans les Réglages.
+Sans raison d'agir, il **n'éteint la clim que s'il l'a lui-même allumée**.
+Pour le savoir, il retient son dernier ordre dans
+`input_text.clim_dernier_ordre` (« mode|consigne|motif ») : si la clim ne s'y
+conforme plus, c'est que quelqu'un l'a reprise, et il n'y touche plus.
+
+Si Laurent modifie la clim **pendant** une période où HA agit (horaire,
+assèchement), HA la lui laisse jusqu'à la fin de cette période, comme un
+thermostat classique. Seule exception, le minimum : une clim coupée à la
+main sous 15 °C est relancée, faute de quoi une absence prolongée en hiver
+laisserait geler une pièce sans radiateur.
+
+Aucune détection d'un « mode manuel » n'est nécessaire. Celle qui existait
+reposait sur l'identité de l'auteur d'un changement, que Comfort Cloud ne
+transmet pas de façon fiable : elle a été retirée.
+
+### Horaire de la clim
+
+Une planification créée dans l'interface, nommée exactement `Clim chambre`
+(`schedule.clim_chambre`). Pendant ses plages, et seulement si Lolo est
+présent, la clim chauffe à `input_number.clim_consigne_horaire` (19 °C par
+défaut, jamais sous le minimum). Sa grille apparaît avec les autres dans la
+section Horaires du tableau de bord.
 
 ### Assèchement à la demande
 
@@ -470,7 +498,8 @@ appui sur **« Assécher la chambre »** (`input_boolean.clim_assechement`) la
 passe en mode chaud à 24 °C pour la durée choisie dans
 `input_select.clim_duree_assechement` (1 h ou 2 h), puis elle s'arrête seule.
 Un second appui l'arrête avant. Pendant l'assèchement, la carte indique
-l'heure de fin.
+l'heure de fin. La fin est vérifiée chaque minute, et non par une minuterie,
+qu'un redémarrage de Home Assistant annulerait.
 
 L'assèchement passe par le mode **chaud**, et non par le mode `dry` : sur
 cette Panasonic, le mode chaud fait tomber l'humidité relative bien plus
@@ -478,41 +507,14 @@ efficacement. Il l'abaisse en réchauffant l'air plutôt qu'en extrayant de
 l'eau — ce qui est justement l'effet recherché contre la condensation et les
 moisissures sur les parois froides.
 
-Appuyer sur le bouton, pour lancer comme pour arrêter, est une demande
-explicite : cela désactive un éventuel pilotage manuel en cours, sans quoi
-rien ne se passerait. Pour la même raison, la garde anti-rafale de
-Comfort Cloud (5 minutes entre deux changements de mode) ne s'applique
-qu'aux vérifications périodiques : une commande passe immédiatement. La fin est vérifiée
-chaque minute, et non par une minuterie, qu'un redémarrage de Home Assistant
-annulerait.
+### Réactivité et quota Comfort Cloud
 
-### Priorités
-
-| Priorité | Condition | Mode |
-|---|---|---|
-| 1 | Assèchement demandé | Chaud, 24 °C |
-| 2 | Sous la température minimale | Chaud, jusqu'à ce minimum |
-| 3 | Rafraîchissement activé, occupant présent, trop chaud | Froid |
-| 4 | Appoint activé et pièce confiée à la clim | Chaud, consigne du moment |
-| 5 | Sinon | Arrêt |
-
-L'assèchement, demandé explicitement, passe devant tout le reste ; à 24 °C,
-il couvre de toute façon le minimum. La température minimale passe avant tout le reste : une pièce sans radiateur
-qui se refroidit n'a aucun recours.
-
-### Pilotage manuel
-
-Dès qu'une consigne est posée **à la main depuis Home Assistant**,
-`input_boolean.clim_pilotage_manuel` s'active et l'automatisation se tait
-pendant `clim_duree_manuel` (3 h par défaut), puis reprend d'elle-même.
-
-La détection repose sur `context.user_id`, renseigné uniquement quand un
-humain agit depuis Home Assistant : une commande émise par une automatisation
-en est dépourvue, ce qui évite que le pilotage ne se prenne lui-même pour toi.
-
-**Limite connue :** un réglage fait depuis la télécommande infrarouge ou
-l'application Comfort Cloud n'a pas davantage de `user_id` et passera donc
-inaperçu. Dans ce cas, active l'interrupteur de pilotage manuel toi-même.
+La garde anti-rafale (5 minutes entre deux changements de mode) ne
+s'applique qu'aux vérifications périodiques : une commande de Laurent passe
+immédiatement. L'automatisation est en mode `restart`, pour qu'un appui
+arrivant pendant qu'elle envoie encore ses ordres au cloud ne soit pas
+ignoré. Aucun ordre n'est envoyé si la clim est déjà dans l'état voulu, et
+mode et consigne partent en un seul appel.
 
 ### Arbitrage avec la chaudière
 
@@ -552,13 +554,13 @@ et la demande chaudière. À relancer après toute modification du bloc
 
 ## Reste à faire
 
-- Brancher les vrais identifiants d'entités (bloquant).
-- Décider de la source de présence : app Companion (GPS) pour automatiser
-  les boutons, ou pilotage manuel.
-- Remettre en service la sonde `t_hr` de la chambre de Léo, qui remonte
-  encore indisponible (pile, ou réappairage ZHA sans supprimer l'appareil).
+- Passer le Lyric T6 en **maintien permanent**, sinon son propre programme
+  reprendra la main sur les consignes envoyées par Home Assistant.
+- Créer dans l'interface les planifications `Chauffage commun` et
+  `Clim chambre`.
 - Racheter des sondes d'ambiance : salle de bains enfants d'abord, puis
-  salon et boulangerie.
-- En attendant, calibrer les vannes des pièces sans sonde (voir plus haut).
+  salon et boulangerie. En attendant, calibrer leurs vannes.
+- Réparer l'add-on Tailscale, qui ne redémarre plus, pour retrouver l'accès
+  à distance ; vérifier l'état d'un éventuel essai Nabu Casa.
 - Affiner `clim_seuil_pac` avec les prix réels de l'électricité et du mazout,
-  si tu actives un jour l'appoint chauffage.
+  si l'appoint chauffage est un jour activé.

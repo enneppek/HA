@@ -2,31 +2,45 @@
 # CLIMATISATION PANASONIC (Comfort Cloud) — chambre de Lolo
 #
 # Cette pièce n'a aucun radiateur : la clim y est l'unique source de chaleur.
-# Elle fait deux choses :
-#   - maintenir une température minimale (input_number.clim_temp_min, 15 °C),
-#     mesurée sur la sonde d'ambiance Sonoff de la pièce ;
-#   - assécher la chambre, SUR DEMANDE UNIQUEMENT : un bouton lance la clim
-#     en mode chaud à 24 °C pendant 1 h ou 2 h, puis elle s'arrête seule. Le
-#     mode chaud assèche mieux que `dry` sur cet appareil.
 #
-# Hors de cela, elle ne fait rien : le rafraîchissement et l'appoint
-# chauffage existent mais sont des interrupteurs désactivés.
+# PRINCIPE : Laurent pilote la clim librement, d'où il veut (tableau de bord,
+# télécommande, application Panasonic). Home Assistant n'intervient que pour
+# une raison précise, et n'éteint la clim QUE s'il l'a lui-même allumée.
 #
-# Dès qu'une consigne de température est posée à la main depuis Home Assistant,
-# l'automatisation s'efface et laisse la main, pour quelques heures.
+# Raisons d'intervenir, par priorité décroissante :
+#   1. Assèchement demandé (bouton)         -> chaud à 24 °C, 1 h ou 2 h
+#   2. Horaire de la clim actif, Lolo là    -> chaud à la consigne horaire
+#   3. Chambre sous la température minimale -> chaud jusqu'à ce minimum
+#   4. Rafraîchissement (optionnel, désactivé par défaut) -> froid
+#   5. Appoint chauffage (optionnel, désactivé par défaut) -> chaud
+#   Sinon : aucune raison. HA éteint la clim s'il en a la main, et la laisse
+#   telle quelle sinon.
 #
-# ATTENTION — Comfort Cloud est une API distante, lente et à quota. Toute
-# commande superflue rapproche de la limite et peut faire tomber l'intégration
-# en erreur. D'où les garde-fous : on n'envoie un ordre que s'il diffère de
-# l'état courant, et jamais plus d'un toutes les 5 minutes par appareil.
+# « Avoir la main » : HA retient son dernier ordre (input_text.
+# clim_dernier_ordre, « mode|consigne|motif »). Si la clim ne s'y conforme
+# plus, c'est que quelqu'un l'a reprise :
+#   - hors de toute raison d'agir, HA l'oublie et ne touche plus à rien ;
+#   - pendant une période (horaire, assèchement…), HA la laisse à Laurent
+#     jusqu'à la fin de cette période, comme un thermostat classique
+#     (« manuel|0|motif ») ; exception pour le minimum, qu'une clim coupée
+#     à la main sous 15 °C ne doit pas faire sauter pendant une absence.
+# Aucune détection d'un « mode manuel » n'est donc nécessaire — elle était de
+# toute façon peu fiable, Comfort Cloud ne disant pas qui a agi.
+#
+# L'assèchement passe par le mode CHAUD et non `dry` : sur cette Panasonic,
+# le mode chaud fait tomber l'humidité relative bien plus efficacement.
+#
+# ATTENTION — Comfort Cloud est une API distante, lente et à quota. D'où les
+# garde-fous : aucun ordre si la clim est déjà dans l'état voulu, et, pour la
+# vérification périodique, pas plus d'un changement de mode toutes les
+# 5 minutes. Une commande de Laurent, elle, passe tout de suite.
 ################################################################################
 
 ################################################################################
 # 1. COMMANDES
 #
-# Aucun `initial:`, ni ici ni sur les réglages numériques : un redémarrage ne
-# doit pas écraser tes choix. Les valeurs de départ sont posées une seule
-# fois par l'automatisation chauffage_initialiser_reglages (chauffage.yaml).
+# Aucun `initial:` : un redémarrage ne doit pas écraser les choix. Les valeurs
+# de départ sont posées une seule fois par chauffage_initialiser_reglages.
 ################################################################################
 input_boolean:
   clim_assechement:
@@ -45,10 +59,6 @@ input_boolean:
     name: "Clim - maintenir une température minimale"
     icon: mdi:thermometer-chevron-down
 
-  clim_pilotage_manuel:
-    name: "Clim - pilotage manuel en cours"
-    icon: mdi:hand-back-right
-
 input_select:
   clim_duree_assechement:
     name: "Clim - durée de l'assèchement"
@@ -57,9 +67,22 @@ input_select:
       - "1 h"
       - "2 h"
 
+input_text:
+  # Mémoire du dernier ordre donné par HA : « mode|consigne|motif », ou vide.
+  # C'est ce qui permet de n'éteindre que ce que HA a lui-même allumé.
+  clim_dernier_ordre:
+    name: "Clim - dernier ordre de Home Assistant"
+    icon: mdi:robot
+    max: 60
+
 input_number:
-
-
+  clim_consigne_horaire:
+    name: "Clim - consigne pendant l'horaire"
+    icon: mdi:calendar-clock
+    min: 15
+    max: 24
+    step: 0.5
+    unit_of_measurement: "°C"
 
   clim_temp_min:
     # La chambre de Lolo n'a pas de radiateur : cette valeur est la seule
@@ -70,14 +93,6 @@ input_number:
     max: 20
     step: 0.5
     unit_of_measurement: "°C"
-
-  clim_duree_manuel:
-    name: "Clim - durée de la main laissée"
-    icon: mdi:timer-sand
-    min: 30
-    max: 720
-    step: 30
-    unit_of_measurement: min
 
   clim_seuil_froid:
     name: "Clim - déclenchement du froid"
@@ -104,19 +119,7 @@ input_number:
     unit_of_measurement: "°C"
 
 ################################################################################
-# 2. DÉCISION
-#
-# Priorité décroissante :
-#   0. Assèchement demandé (bouton)               -> chaud, 24 °C
-#   2. Rafraîchissement activé, occupant, trop chaud -> froid
-#   3. Appoint activé et pièce confiée à la clim  -> chaud, consigne du moment
-#   5. Sinon                                      -> arrêt
-#
-# L'assèchement passe par le mode CHAUD et non `dry` : sur cette Panasonic,
-# le mode chaud fait tomber l'humidité relative bien plus efficacement.
-# À noter qu'il l'abaisse en réchauffant l'air plutôt qu'en extrayant de
-# l'eau — ce qui est précisément ce qui compte contre la condensation et les
-# moisissures sur les parois froides.
+# 2. DÉCISION : ce que HA voudrait, et pourquoi
 ################################################################################
 template:
   - sensor:
@@ -124,12 +127,8 @@ template:
         unique_id: clim_pilotage
         icon: mdi:air-conditioner
         state: >-
-          {% if is_state('input_boolean.clim_pilotage_manuel', 'on') %}
-            manuel
-          {% else %}
-            {% set o = state_attr('sensor.clim_pilotage', 'ordres') or {} %}
-            {{ o.values() | rejectattr('mode', 'eq', 'off') | list | count }}
-          {% endif %}
+          {% set o = state_attr('sensor.clim_pilotage', 'ordres') or {} %}
+          {{ o.values() | rejectattr('motif', 'eq', 'arret') | list | count }}
         attributes:
           ordres: >-
             {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
@@ -138,11 +137,17 @@ template:
             {% set temps = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
             {% set seuil_froid = states('input_number.clim_seuil_froid') | float(default=26) %}
             {% set consigne_ete = states('input_number.clim_consigne_ete') | float(default=25) %}
+            {% set consigne_horaire = states('input_number.clim_consigne_horaire') | float(default=19) %}
             {% set temp_min = states('input_number.clim_temp_min') | float(default=15) %}
             {% set froid_ok = is_state('input_boolean.clim_auto_froid', 'on') %}
             {% set chaud_ok = is_state('input_boolean.clim_auto_chaud', 'on') %}
             {% set temp_min_ok = is_state('input_boolean.clim_maintien_temp_min', 'on') %}
             {% set assecher = is_state('input_boolean.clim_assechement', 'on') %}
+            {# Hystérésis du minimum : une fois lancé par HA, le chauffage
+               continue jusqu'à 1 °C au-dessus, sinon la clim battrait autour
+               du seuil à chaque vérification. #}
+            {% set en_maintien = states('input_text.clim_dernier_ordre')
+                                 .endswith('|temp_min') %}
             {% set ns = namespace(presents=[]) %}
             {% for q in ['leo', 'pablo', 'laurent'] %}
               {% if is_state('input_boolean.presence_' ~ q, 'on') %}
@@ -154,11 +159,14 @@ template:
               {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
               {% set mesure = temps.get(p) | float(default=20) %}
               {% set cible = consignes.get(p, 15) | float(default=15) %}
-              {# L'assèchement, demandé explicitement, passe devant tout le
-                 reste ; il chauffe à 24 °C, ce qui couvre aussi le minimum. #}
+              {% set horaire = c.horaire_clim and is_state(c.horaire_clim, 'on') %}
               {% if assecher %}
-                {% set ordre = {'mode': 'heat', 'temp': 24, 'motif': 'assechement'} %}
-              {% elif temp_min_ok and mesure < temp_min %}
+                {% set ordre = {'mode': 'heat', 'temp': 24.0, 'motif': 'assechement'} %}
+              {% elif horaire and occupe %}
+                {% set t = [consigne_horaire, temp_min] | max if temp_min_ok else consigne_horaire %}
+                {% set ordre = {'mode': 'heat', 'temp': t, 'motif': 'horaire'} %}
+              {% elif temp_min_ok and (mesure < temp_min
+                                       or (en_maintien and mesure < temp_min + 1)) %}
                 {% set ordre = {'mode': 'heat', 'temp': temp_min, 'motif': 'temp_min'} %}
               {% elif froid_ok and occupe and mesure > seuil_froid %}
                 {% set ordre = {'mode': 'cool', 'temp': consigne_ete, 'motif': 'froid'} %}
@@ -173,32 +181,32 @@ template:
             {{ nd.d }}
 
   ##############################################################################
-  # Ce que fait réellement la clim, en clair. Sert à l'illustration du tableau
-  # de bord : le mode de l'appareil ne suffit pas, l'assèchement passant lui
-  # aussi par le mode chaud.
+  # Ce que fait réellement la clim, en clair, pour l'illustration du tableau
+  # de bord. « Manuel » : elle tourne sans que HA ait de raison de la faire
+  # tourner — c'est donc Laurent qui l'a mise en marche.
   ##############################################################################
   - sensor:
       - name: "Clim rôle"
         unique_id: clim_role
         icon: mdi:air-conditioner
         state: >-
-          {% if is_state('input_boolean.clim_pilotage_manuel', 'on') %}
-            Manuel
+          {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+          {% set clims = cfg.values() | selectattr('clim') | map(attribute='clim') | list %}
+          {% set o = (state_attr('sensor.clim_pilotage', 'ordres') or {}).values() | list %}
+          {% set motif = o[0].motif if o else 'arret' %}
+          {% if motif == 'arret' %}
+            {{ 'Manuel' if clims and states(clims[0]) not in ['off', 'unknown', 'unavailable']
+               else 'Arrêt' }}
           {% else %}
-            {% set o = (state_attr('sensor.clim_pilotage', 'ordres') or {}).values() | list %}
-            {% set motif = o[0].motif if o else 'arret' %}
-            {{ {'temp_min': 'Chauffage', 'appoint': 'Chauffage', 'froid': 'Froid',
-                'assechement': 'Assèchement'}.get(motif, 'Arrêt') }}
+            {{ {'assechement': 'Assèchement', 'froid': 'Froid'}.get(motif, 'Chauffage') }}
           {% endif %}
 
 ################################################################################
 # 3. APPLICATION
 ################################################################################
 automation:
-  #
-  # `restart` et non `single` : un appui (arrêter l'assèchement, par exemple)
-  # arrivant pendant qu'une exécution envoie encore ses ordres au cloud ne
-  # doit pas être ignoré ; la dernière intention l'emporte.
+  # `restart` : un appui arrivant pendant qu'une exécution envoie encore ses
+  # ordres au cloud ne doit pas être ignoré ; la dernière intention l'emporte.
   - id: clim_pilotage_automatique
     alias: "Clim - pilotage automatique"
     mode: restart
@@ -213,16 +221,13 @@ automation:
           - input_boolean.clim_auto_chaud
           - input_boolean.clim_assechement
           - input_boolean.clim_maintien_temp_min
-          - input_boolean.clim_pilotage_manuel
           - input_boolean.presence_laurent
+          - input_number.clim_consigne_horaire
+          - input_number.clim_temp_min
+          - schedule.clim_chambre
       - platform: homeassistant
         event: start
         id: demarrage
-    condition:
-      # Tant que tu pilotes à la main, l'automatisation se tait.
-      - condition: state
-        entity_id: input_boolean.clim_pilotage_manuel
-        state: "off"
     action:
       - delay: "00:00:05"
       - repeat:
@@ -236,113 +241,111 @@ automation:
                 ordre: >-
                   {{ (state_attr('sensor.clim_pilotage', 'ordres')
                       or {})[repeat.item] }}
+                # Que faire ?
+                #   commander : envoyer l'ordre voulu (ou l'enregistrer si la
+                #               clim s'y conforme déjà) — HA a la main
+                #   arreter   : éteindre ce que HA avait allumé
+                #   ceder     : Laurent a repris la clim pendant cette période ;
+                #               HA la lui laisse jusqu'à la fin de la période
+                #   liberer   : oublier le dernier ordre, sans toucher à la clim
+                #   rien
+                decision: >-
+                  {% set dernier = states('input_text.clim_dernier_ordre') %}
+                  {% set d = dernier.split('|') if dernier.count('|') == 2 else [] %}
+                  {% set mode = states(clim) %}
+                  {% set consigne = state_attr(clim, 'temperature') | float(default=-99) %}
+                  {# HA a la main : la clim est toujours dans l'état qu'il a commandé. #}
+                  {% set a_la_main = d | count == 3 and mode == d[0]
+                     and (consigne - d[1] | float(default=0)) | abs <= 0.4 %}
+                  {# Ordre tout juste envoyé : le cloud n'a peut-être pas encore
+                     répercuté l'état, on ne conclut pas à une reprise en main. #}
+                  {% set recent = d | count == 3
+                     and (now() - states.input_text.clim_dernier_ordre.last_changed)
+                         .total_seconds() < 120 %}
+                  {# Anti-rafale : seulement pour la vérification périodique. #}
+                  {% set garde = trigger.id != 'horloge'
+                     or (now() - states[clim].last_changed).total_seconds() > 300 %}
+                  {% set repris = d | count == 3 and d[0] != 'manuel'
+                     and not a_la_main and not recent %}
+                  {% if mode in ['unknown', 'unavailable'] %}rien
+                  {% elif ordre.motif == 'arret' %}
+                    {% if d | count == 3 and d[0] != 'manuel'
+                          and (a_la_main or recent) and garde %}arreter
+                    {% elif d | count == 3 and (d[0] == 'manuel' or repris) %}liberer
+                    {% else %}rien{% endif %}
+                  {# Laurent a repris la main pendant cette période : on la lui laisse. #}
+                  {% elif d | count == 3 and d[0] == 'manuel' and d[2] == ordre.motif %}rien
+                  {# Il vient de la reprendre. Sauf pour le minimum : couper la clim
+                     sous 15 °C laisserait la pièce geler pendant une absence. #}
+                  {% elif repris and d[2] == ordre.motif
+                          and ordre.motif != 'temp_min' %}ceder
+                  {% elif ordre.motif == 'temp_min' and not a_la_main
+                          and mode == 'heat' and consigne >= ordre.temp %}rien
+                  {% elif mode == ordre.mode
+                          and (consigne - ordre.temp) | abs <= 0.4 %}commander
+                  {% elif garde %}commander
+                  {% else %}rien{% endif %}
             # `if/then` et non `condition:` : une condition qui échoue
             # interromprait la boucle entière, pas la seule itération.
-            # Garde anti-rafale (5 min entre deux changements de mode, pour
-            # ménager le quota Comfort Cloud) : seulement pour la vérification
-            # périodique. Une commande de Laurent passe tout de suite.
             - if:
                 - condition: template
-                  value_template: >-
-                    {{ states(clim) not in ['unknown', 'unavailable']
-                       and states(clim) != ordre.mode
-                       and (trigger.id != 'horloge'
-                            or (now() - states[clim].last_changed)
-                               .total_seconds() > 300) }}
+                  value_template: "{{ decision == 'commander' }}"
+              then:
+                - if:
+                    - condition: template
+                      value_template: >-
+                        {{ states(clim) != ordre.mode
+                           or (state_attr(clim, 'temperature') | float(default=-99)
+                               - ordre.temp) | abs > 0.4 }}
+                  then:
+                    - service: climate.set_temperature
+                      target:
+                        entity_id: "{{ clim }}"
+                      data:
+                        hvac_mode: "{{ ordre.mode }}"
+                        temperature: "{{ ordre.temp }}"
+                - service: input_text.set_value
+                  target:
+                    entity_id: input_text.clim_dernier_ordre
+                  data:
+                    value: "{{ ordre.mode }}|{{ ordre.temp }}|{{ ordre.motif }}"
+            - if:
+                - condition: template
+                  value_template: "{{ decision == 'arreter' }}"
               then:
                 - service: climate.set_hvac_mode
                   target:
                     entity_id: "{{ clim }}"
                   data:
-                    hvac_mode: "{{ ordre.mode }}"
+                    hvac_mode: "off"
+                - service: input_text.set_value
+                  target:
+                    entity_id: input_text.clim_dernier_ordre
+                  data:
+                    value: ""
             - if:
                 - condition: template
-                  value_template: >-
-                    {{ ordre.mode in ['cool', 'heat']
-                       and states(clim) not in ['unknown', 'unavailable']
-                       and (state_attr(clim, 'temperature') | float(default=-99)
-                            - ordre.temp | float) | abs > 0.4 }}
+                  value_template: "{{ decision == 'ceder' }}"
               then:
-                - service: climate.set_temperature
+                - service: input_text.set_value
                   target:
-                    entity_id: "{{ clim }}"
+                    entity_id: input_text.clim_dernier_ordre
                   data:
-                    temperature: "{{ ordre.temp }}"
+                    value: "manuel|0|{{ ordre.motif }}"
+            - if:
+                - condition: template
+                  value_template: "{{ decision == 'liberer' }}"
+              then:
+                - service: input_text.set_value
+                  target:
+                    entity_id: input_text.clim_dernier_ordre
+                  data:
+                    value: ""
 
   ##############################################################################
-  # Détection d'un réglage à la main.
-  #
-  # `context.user_id` n'est renseigné que si un humain a agi depuis Home
-  # Assistant. Une commande émise par une automatisation en est dépourvue,
-  # ce qui évite que le pilotage ne se prenne lui-même pour toi.
-  #
-  # Limite connue : un réglage fait depuis la télécommande infrarouge ou
-  # l'application Comfort Cloud n'a pas non plus de user_id, et passera donc
-  # inaperçu. Dans ce cas, active l'interrupteur de pilotage manuel toi-même.
+  # Fin de l'assèchement au bout de la durée choisie. Vérification chaque
+  # minute plutôt qu'un `delay`, qu'un redémarrage de HA annulerait.
   ##############################################################################
-  - id: clim_detection_pilotage_manuel
-    alias: "Clim - détecter un réglage manuel"
-    mode: single
-    trigger:
-      - platform: state
-        entity_id: climate.clim_chambre
-    condition:
-      - condition: template
-        value_template: "{{ trigger.to_state.context.user_id is not none }}"
-    action:
-      - service: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.clim_pilotage_manuel
-
-  # Pas de `delay` : un redémarrage de Home Assistant l'annulerait, alors que
-  # l'interrupteur retrouve son état « activé ». La clim resterait alors en
-  # pilotage manuel pour toujours, et l'automatisation muette. On vérifie
-  # plutôt, toutes les 5 minutes, depuis combien de temps il est activé.
-  - id: clim_fin_pilotage_manuel
-    alias: "Clim - rendre la main à l'automatisation"
-    mode: single
-    trigger:
-      - platform: time_pattern
-        minutes: "/5"
-      - platform: homeassistant
-        event: start
-    condition:
-      - condition: state
-        entity_id: input_boolean.clim_pilotage_manuel
-        state: "on"
-      - condition: template
-        value_template: >-
-          {{ (now() - states.input_boolean.clim_pilotage_manuel.last_changed)
-             .total_seconds()
-             >= states('input_number.clim_duree_manuel') | int(default=180) * 60 }}
-    action:
-      - service: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.clim_pilotage_manuel
-
-  ##############################################################################
-  # Assèchement à la demande.
-  #
-  # Appuyer sur le bouton, pour lancer comme pour arrêter, est une demande
-  # explicite : elle reprend la main sur un éventuel pilotage manuel en cours,
-  # sans quoi l'automatisation resterait muette et rien ne se passerait.
-  # `from` et `to` excluent la restauration d'état au démarrage.
-  ##############################################################################
-  - id: clim_assechement_debut
-    alias: "Clim - reprendre la main à chaque appui sur Assécher"
-    mode: single
-    trigger:
-      - platform: state
-        entity_id: input_boolean.clim_assechement
-        from: ["on", "off"]
-        to: ["on", "off"]
-    action:
-      - service: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.clim_pilotage_manuel
-
-  # Fin au bout de la durée choisie. Vérification chaque minute plutôt qu'un
-  # `delay`, qu'un redémarrage de Home Assistant annulerait.
   - id: clim_assechement_fin
     alias: "Clim - arrêter l'assèchement"
     mode: single
