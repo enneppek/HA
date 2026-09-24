@@ -1124,9 +1124,6 @@ automation:
             - {entite: input_number.chaudiere_consigne_marche, valeur: 24}
             - {entite: input_number.chaudiere_consigne_arret, valeur: 10}
             - {entite: input_number.duree_confort, valeur: 120}
-            - {entite: input_number.clim_seuil_humidite, valeur: 65}
-            - {entite: input_number.clim_deshu_delta, valeur: 1.5}
-            - {entite: input_number.clim_deshu_temp_max, valeur: 22}
             - {entite: input_number.clim_temp_min, valeur: 15}
             - {entite: input_number.clim_duree_manuel, valeur: 180}
             - {entite: input_number.clim_seuil_froid, valeur: 26}
@@ -1139,12 +1136,11 @@ automation:
               data:
                 value: "{{ repeat.item.valeur }}"
       # Comportements voulus par défaut : Lolo à la maison, et la clim de sa
-      # chambre qui limite l'humidité et maintient une température minimale.
+      # chambre qui maintient une température minimale.
       - service: input_boolean.turn_on
         target:
           entity_id:
             - input_boolean.presence_laurent
-            - input_boolean.clim_auto_deshu
             - input_boolean.clim_maintien_temp_min
       - service: input_boolean.turn_on
         target:

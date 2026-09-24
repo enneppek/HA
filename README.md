@@ -31,8 +31,7 @@ Aucun réglage ne porte de `initial:` : Home Assistant réimposerait sinon
 cette valeur à chaque redémarrage, effaçant ce qui a été réglé depuis la
 carte. Les valeurs de départ sont posées **une seule fois**, au premier
 démarrage, par l'automatisation `chauffage_initialiser_reglages`. Elle active
-aussi la présence de Laurent, « Limiter l'humidité » et « Maintenir une
-température minimale ».
+aussi la présence de Laurent et « Maintenir une température minimale ».
 
 Pour revenir aux valeurs d'usine : éteindre
 `input_boolean.chauffage_reglages_initialises`, puis redémarrer.
@@ -264,8 +263,8 @@ réglage est indisponible. La température d'absence, elle, est commune à
 toute la maison (`input_number.chauffage_absence`).
 
 La chambre de Lolo n'a pas ces réglages : sa clim n'y chauffe pas, sauf à
-activer l'appoint chauffage. Elle ne tient que ses deux garanties,
-température minimale et humidité maximale.
+activer l'appoint chauffage. Elle maintient une température minimale, et
+n'assèche que sur demande (voir plus bas).
 
 ### Horaires
 
@@ -447,22 +446,25 @@ l'inertie réelle de l'installation.
 ## Climatisation Panasonic — chambre de Lolo
 
 Cette pièce **n'a aucun radiateur**. La clim y est l'unique source de
-chaleur, ce qui lui donne deux garanties à tenir, toutes deux réglables
-depuis la carte, et mesurées sur la sonde d'ambiance Sonoff de la pièce :
+chaleur. Elle fait deux choses, et rien d'autre :
 
-| Garantie | Réglage | Défaut |
+| Rôle | Déclenchement | Action |
 |---|---|---|
-| Température minimale | `input_number.clim_temp_min` | 15 °C |
-| Humidité relative maximale | `input_number.clim_seuil_humidite` | 65 % |
+| Température minimale | automatique, si la sonde Sonoff passe sous le seuil | chaud, jusqu'à `input_number.clim_temp_min` (15 °C) |
+| Assèchement | **uniquement sur demande**, bouton « Assécher la chambre » | chaud à **24 °C** pendant 1 h ou 2 h, au choix |
 
-Chacune se désactive : `input_boolean.clim_maintien_temp_min` et
-`input_boolean.clim_auto_deshu`.
+Le maintien du minimum se désactive par `input_boolean.clim_maintien_temp_min`.
+Le rafraîchissement d'été et l'appoint chauffage existent, mais sont
+**désactivés par défaut** : ce sont deux interrupteurs dans les Réglages.
 
-En dehors de ces deux garanties, la clim ne fait rien. Le rafraîchissement
-d'été et l'appoint chauffage existent, mais sont **désactivés par défaut** :
-ce sont deux interrupteurs à activer si le besoin s'en fait sentir.
+### Assèchement à la demande
 
-### Assèchement par le mode chaud
+Aucun seuil d'humidité ne déclenche la clim : c'est un choix de Laurent. Un
+appui sur **« Assécher la chambre »** (`input_boolean.clim_assechement`) la
+passe en mode chaud à 24 °C pour la durée choisie dans
+`input_select.clim_duree_assechement` (1 h ou 2 h), puis elle s'arrête seule.
+Un second appui l'arrête avant. Pendant l'assèchement, la carte indique
+l'heure de fin.
 
 L'assèchement passe par le mode **chaud**, et non par le mode `dry` : sur
 cette Panasonic, le mode chaud fait tomber l'humidité relative bien plus
@@ -470,24 +472,23 @@ efficacement. Il l'abaisse en réchauffant l'air plutôt qu'en extrayant de
 l'eau — ce qui est justement l'effet recherché contre la condensation et les
 moisissures sur les parois froides.
 
-La consigne visée vaut `température ambiante + clim_deshu_delta` (1,5 °C par
-défaut), bornée par `clim_deshu_temp_max` (22 °C) : il s'agit d'assécher, pas
-de cuire la pièce. Au-delà de cette limite, l'assèchement s'interrompt.
-
-Une hystérésis de 5 points évite le battement : l'assèchement démarre
-au-dessus du seuil et ne s'arrête que 5 points en dessous.
+Appuyer sur le bouton est une demande explicite : cela désactive un éventuel
+pilotage manuel en cours, sans quoi rien ne se passerait. La fin est vérifiée
+chaque minute, et non par une minuterie, qu'un redémarrage de Home Assistant
+annulerait.
 
 ### Priorités
 
 | Priorité | Condition | Mode |
 |---|---|---|
-| 1 | Sous la température minimale | Chaud, jusqu'à ce minimum |
-| 2 | Rafraîchissement activé, occupant présent, trop chaud | Froid |
-| 3 | Appoint activé et pièce confiée à la clim | Chaud, consigne du moment |
-| 4 | Humidité au-dessus du seuil | Chaud (assèchement) |
+| 1 | Assèchement demandé | Chaud, 24 °C |
+| 2 | Sous la température minimale | Chaud, jusqu'à ce minimum |
+| 3 | Rafraîchissement activé, occupant présent, trop chaud | Froid |
+| 4 | Appoint activé et pièce confiée à la clim | Chaud, consigne du moment |
 | 5 | Sinon | Arrêt |
 
-La température minimale passe avant tout le reste : une pièce sans radiateur
+L'assèchement, demandé explicitement, passe devant tout le reste ; à 24 °C,
+il couvre de toute façon le minimum. La température minimale passe avant tout le reste : une pièce sans radiateur
 qui se refroidit n'a aucun recours.
 
 ### Pilotage manuel

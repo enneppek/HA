@@ -88,8 +88,11 @@ le capteur « unavailable », sans autre signal.
   détourné en relais de chaudière (24 °C = appel, 10 °C = repos). Il doit être
   en maintien permanent.
 - `climate.clim_chambre` : clim Panasonic, chambre de Lolo, **pièce sans
-  radiateur**. Déshumidifie en mode chaud (plus efficace que `dry` sur cet
-  appareil).
+  radiateur**. Maintient une température minimale (15 °C). L'assèchement est
+  **uniquement manuel** : bouton `input_boolean.clim_assechement`, mode chaud
+  à 24 °C pendant 1 h ou 2 h (`input_select.clim_duree_assechement`). Aucun
+  seuil d'humidité ne déclenche la clim : choix confirmé par Laurent. Le mode
+  chaud assèche mieux que `dry` sur cet appareil.
 - 8 vannes Sonoff TRVZB sous ZHA ; correspondance pièce par pièce dans le bloc
   `pieces` de `packages/chauffage.yaml`.
 - Sondes d'ambiance : `t_hr` (Léo), `sonoff_t_hr_2` (Pablo), `sonoff_snzb_02d`

@@ -54,6 +54,10 @@ def rendre_brut(tpl, globals_=None):
 
     env = Environment()
     env.filters['float'] = flottant
+    # Équivalents des fonctions de date propres à Home Assistant.
+    env.filters['timestamp_custom'] = (
+        lambda ts, fmt: datetime.datetime.fromtimestamp(ts).strftime(fmt))
+    env.globals['as_timestamp'] = lambda dt: dt.timestamp()
     env.globals.update(globals_ or {})
     return env.from_string(tpl).render().strip()
 
@@ -76,9 +80,7 @@ class Monde:
         'input_number.clim_seuil_pac': 5,
         'input_number.clim_seuil_froid': 26,
         'input_number.clim_consigne_ete': 25,
-        'input_number.clim_seuil_humidite': 65,
-        'input_number.clim_deshu_delta': 1.5,
-        'input_number.clim_deshu_temp_max': 22,
+        'input_select.clim_duree_assechement': '1 h',
         'input_number.clim_temp_min': 15,
         'input_number.chaudiere_consigne_marche': 24,
         'input_number.chaudiere_consigne_arret': 10,
@@ -86,11 +88,12 @@ class Monde:
 
     def __init__(self, presents=(), horaire=True, boosts=(), temps=None,
                  humidites=None, semaine=41, exterieur=12.0,
-                 clim_froid=False, clim_chaud=False, clim_deshu=True,
+                 clim_froid=False, clim_chaud=False, assechement=False,
                  temp_min=True, manuel=False, clim_etat='off',
-                 sondes_indispo=(), reglages=None, horaires=None):
-        # Valeurs par défaut conformes à l'installation : déshumidification
-        # seule, froid et appoint chauffage désactivés.
+                 sondes_indispo=(), reglages=None, horaires=None, depuis=None):
+        # Valeurs par défaut conformes à l'installation : maintien d'une
+        # température minimale, assèchement seulement sur demande, froid et
+        # appoint chauffage désactivés.
         self.presents = set(presents)
         self.horaire = horaire
         self.boosts = set(boosts)
@@ -98,7 +101,10 @@ class Monde:
         self.humidites = humidites or {}  # clé = nom de pièce
         self.semaine = semaine
         self.exterieur = exterieur
-        self.clim = {'froid': clim_froid, 'chaud': clim_chaud, 'deshu': clim_deshu}
+        self.clim = {'froid': clim_froid, 'chaud': clim_chaud}
+        self.assechement = assechement
+        # {entité: minutes écoulées depuis son dernier changement d'état}
+        self.depuis = depuis or {}
         self.temp_min, self.manuel, self.clim_etat = temp_min, manuel, clim_etat
         self.sondes_indispo = set(sondes_indispo)
         self.reglages = {**self.REGLAGES, **(reglages or {})}
@@ -143,6 +149,8 @@ class Monde:
             return 'on' if self.temp_min else 'off'
         if eid == 'input_boolean.clim_pilotage_manuel':
             return 'on' if self.manuel else 'off'
+        if eid == 'input_boolean.clim_assechement':
+            return 'on' if self.assechement else 'off'
         if eid.startswith('input_boolean.clim_auto_'):
             return 'on' if self.clim[eid.rsplit('_', 1)[1]] else 'off'
         if eid.startswith('input_boolean.presence_'):
@@ -172,9 +180,40 @@ class Monde:
     def now(self):
         return datetime.datetime.fromisocalendar(2026, self.semaine, 1)
 
+    def objet_etat(self, eid):
+        """Équivalent de states['domaine.objet'] : état et date du changement."""
+        class Etat:
+            pass
+        e = Etat()
+        e.state = self.states(eid)
+        e.last_changed = self.now() - datetime.timedelta(minutes=self.depuis.get(eid, 0))
+        return e
+
+
+class Etats:
+    """Imite `states` de Home Assistant : appelable (states('x.y')), indexable
+    (states['x.y']) et parcourable par attributs (states.x.y)."""
+
+    def __init__(self, monde):
+        self._m = monde
+
+    def __call__(self, eid):
+        return self._m.states(eid)
+
+    def __getitem__(self, eid):
+        return self._m.objet_etat(eid)
+
+    def __getattr__(self, domaine):
+        monde = self._m
+
+        class Domaine:
+            def __getattr__(self, objet):
+                return monde.objet_etat(f"{domaine}.{objet}")
+        return Domaine()
+
 
 def rendre(tpl, m):
-    return rendre_brut(tpl, {'states': m.states, 'is_state': m.is_state,
+    return rendre_brut(tpl, {'states': Etats(m), 'is_state': m.is_state,
                              'state_attr': m.state_attr, 'now': m.now})
 
 
@@ -333,9 +372,9 @@ verifier("toutes les clés de state_image sont des textes",
          [k for k in cles_state_image(carte) if not isinstance(k, str)], [])
 
 titre("Clim : rôle affiché sur le tableau de bord")
-m = evaluer(Monde(presents=['laurent'], semaine=41, temps={'chambre_laurent': 19.0},
-                  humidites={'chambre_laurent': 72.0}))
-verifier("humidité trop haute -> « Assèchement » (et non Chauffage)",
+m = evaluer(Monde(presents=['laurent'], semaine=41, assechement=True,
+                  temps={'chambre_laurent': 19.0}))
+verifier("assèchement demandé -> « Assèchement » (et non Chauffage)",
          rendre(TPL_ROLE, m), 'Assèchement')
 m = evaluer(Monde(presents=[], semaine=40, temps={'chambre_laurent': 9.0}))
 verifier("pièce trop froide -> « Chauffage »", rendre(TPL_ROLE, m), 'Chauffage')
@@ -605,50 +644,46 @@ m = evaluer(Monde(presents=['laurent'], semaine=41,
 verifier("boulangerie froide (mesurée par sa vanne) -> demande",
          rendre(TPL_DEMANDE, m), 'True')
 
-titre("Clim — déshumidification (comportement par défaut)")
-m = evaluer(Monde(presents=['laurent'], semaine=41,
-                  temps={'chambre_laurent': 19.0},
-                  humidites={'chambre_laurent': 72.0}))
-verifier("72 % d'humidité -> mode chaud, pas dry",
-         m.ordres['chambre_laurent']['mode'], 'heat')
-verifier("  -> consigne = ambiante + delta", m.ordres['chambre_laurent']['temp'], 20.5)
-
-m = evaluer(Monde(presents=['laurent'], semaine=41,
-                  temps={'chambre_laurent': 19.0},
-                  humidites={'chambre_laurent': 55.0}))
-verifier("air sec : arrêt", m.ordres['chambre_laurent']['mode'], 'off')
-
-m = evaluer(Monde(presents=['laurent'], semaine=41, clim_deshu=False,
-                  temps={'chambre_laurent': 19.0},
-                  humidites={'chambre_laurent': 72.0}))
-verifier("déshumidification désactivée : arrêt",
+titre("Clim — assèchement uniquement à la demande")
+m = evaluer(Monde(presents=['laurent'], semaine=41, temps={'chambre_laurent': 19.0},
+                  humidites={'chambre_laurent': 85.0}))
+verifier("85 % d'humidité sans appui sur le bouton : arrêt",
          m.ordres['chambre_laurent']['mode'], 'off')
 
-titre("Clim — hystérésis d'humidité")
-m = evaluer(Monde(presents=['laurent'], semaine=41, clim_etat='heat',
-                  temps={'chambre_laurent': 19.0},
-                  humidites={'chambre_laurent': 62.0}))
-verifier("déjà en marche à 62 % : poursuit",
-         m.ordres['chambre_laurent']['mode'], 'heat')
+m = evaluer(Monde(presents=['laurent'], semaine=41, assechement=True,
+                  temps={'chambre_laurent': 19.0}))
+verifier("bouton appuyé : mode chaud", m.ordres['chambre_laurent']['mode'], 'heat')
+verifier("  -> à 24 °C", m.ordres['chambre_laurent']['temp'], 24)
 
-m = evaluer(Monde(presents=['laurent'], semaine=41, clim_etat='off',
-                  temps={'chambre_laurent': 19.0},
-                  humidites={'chambre_laurent': 62.0}))
-verifier("à l'arrêt à 62 % : ne redémarre pas",
-         m.ordres['chambre_laurent']['mode'], 'off')
+m = evaluer(Monde(presents=['laurent'], semaine=41, assechement=True,
+                  temps={'chambre_laurent': 23.0}))
+verifier("pièce déjà à 23° : l'assèchement demandé a quand même lieu",
+         m.ordres['chambre_laurent']['temp'], 24)
 
-titre("Clim — limite haute d'assèchement")
-m = evaluer(Monde(presents=['laurent'], semaine=41,
-                  temps={'chambre_laurent': 21.5},
-                  humidites={'chambre_laurent': 72.0}))
-verifier("ambiante + delta dépasse la limite : bridé à 22°",
-         m.ordres['chambre_laurent']['temp'], 22.0)
+m = evaluer(Monde(presents=[], semaine=40, assechement=True,
+                  temps={'chambre_laurent': 9.0}))
+verifier("pièce à 9° : l'assèchement (24°) couvre aussi le minimum",
+         m.ordres['chambre_laurent']['temp'], 24)
 
-m = evaluer(Monde(presents=['laurent'], semaine=41,
-                  temps={'chambre_laurent': 23.0},
-                  humidites={'chambre_laurent': 72.0}))
-verifier("déjà au-dessus de la limite : on n'insiste pas",
-         m.ordres['chambre_laurent']['mode'], 'off')
+debut_assechement = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_assechement_debut')
+verifier("appuyer sur le bouton reprend la main sur le pilotage manuel",
+         debut_assechement['action'][0]['target']['entity_id'],
+         'input_boolean.clim_pilotage_manuel')
+
+fin_assechement = next(a for a in clim_pkg['automation'] if a['id'] == 'clim_assechement_fin')
+garde_fin = fin_assechement['condition'][1]['value_template']
+
+
+def fin_atteinte(duree, minutes):
+    m = Monde(reglages={'input_select.clim_duree_assechement': duree},
+              depuis={'input_boolean.clim_assechement': minutes})
+    return rendre(garde_fin, m)
+
+
+verifier("durée 1 h, lancé il y a 59 min : continue", fin_atteinte('1 h', 59), 'False')
+verifier("durée 1 h, lancé il y a 60 min : s'arrête", fin_atteinte('1 h', 60), 'True')
+verifier("durée 2 h, lancé il y a 90 min : continue", fin_atteinte('2 h', 90), 'False')
+verifier("durée 2 h, lancé il y a 120 min : s'arrête", fin_atteinte('2 h', 120), 'True')
 
 titre("Clim — température minimale, prioritaire sur tout")
 m = evaluer(Monde(presents=[], semaine=40, temps={'chambre_laurent': 9.0}))
@@ -662,20 +697,13 @@ m = evaluer(Monde(presents=[], semaine=40, temp_min=False,
 verifier("maintien désactivé : plus rien ne chauffe",
          m.ordres['chambre_laurent']['mode'], 'off')
 
-titre("Clim — les deux garanties sont paramétrables")
+titre("Clim — température minimale paramétrable")
 m = evaluer(Monde(presents=[], semaine=40,
                   reglages={'input_number.clim_temp_min': 17},
                   temps={'chambre_laurent': 16.0}))
 verifier("minimum porté à 17° : 16° déclenche la chauffe",
          m.ordres['chambre_laurent']['mode'], 'heat')
 verifier("  -> jusqu'à 17°", m.ordres['chambre_laurent']['temp'], 17.0)
-
-m = evaluer(Monde(presents=['laurent'], semaine=41,
-                  reglages={'input_number.clim_seuil_humidite': 55},
-                  temps={'chambre_laurent': 19.0},
-                  humidites={'chambre_laurent': 60.0}))
-verifier("seuil d'humidité abaissé à 55 % : 60 % déclenche l'assèchement",
-         m.ordres['chambre_laurent']['mode'], 'heat')
 
 titre("Clim — rôles désactivés par défaut")
 m = evaluer(Monde(presents=['laurent'], semaine=41, exterieur=30.0,

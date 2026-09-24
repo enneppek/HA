@@ -629,17 +629,43 @@ views:
                 color: "#4361ee"
             grid_options:
               columns: 6
+          # --- Assèchement à la demande ---------------------------------
           - type: tile
-            entity: input_number.clim_seuil_humidite
-            name: Humidité maximale
-            icon: mdi:water-percent
-            color: blue
-            features_position: bottom
-            features:
-              - type: numeric-input
-                style: buttons
+            entity: input_boolean.clim_assechement
+            name: Assécher la chambre
+            icon: mdi:water-off
+            color: teal
+            vertical: true
+            tap_action:
+              action: toggle
             grid_options:
               columns: 6
+              rows: 2
+          - type: tile
+            entity: input_select.clim_duree_assechement
+            name: Durée
+            icon: mdi:timer-outline
+            color: teal
+            features_position: bottom
+            features:
+              - type: select-options
+            grid_options:
+              columns: 6
+              rows: 2
+          # N'apparaît que pendant un assèchement, avec son heure de fin.
+          - type: markdown
+            visibility:
+              - condition: state
+                entity: input_boolean.clim_assechement
+                state: "on"
+            grid_options:
+              columns: full
+            content: |
+              {% set debut = as_timestamp(states.input_boolean.clim_assechement.last_changed) %}
+              {% set heures = states('input_select.clim_duree_assechement') | replace(' h', '') | int(default=1) %}
+              💧 **Assèchement en cours** : clim en chauffage à 24 °C
+              jusqu'à **{{ (debut + heures * 3600) | timestamp_custom('%H:%M') }}**.
+              Appuie de nouveau sur « Assécher la chambre » pour arrêter avant.
           - type: tile
             entity: input_number.clim_temp_min
             name: Température minimale
@@ -649,15 +675,6 @@ views:
             features:
               - type: numeric-input
                 style: buttons
-            grid_options:
-              columns: 6
-          - type: tile
-            entity: input_boolean.clim_auto_deshu
-            name: Limiter l'humidité
-            icon: mdi:water-off
-            color: blue
-            tap_action:
-              action: toggle
             grid_options:
               columns: 6
           - type: tile
@@ -759,10 +776,6 @@ views:
                 name: Clim - rafraîchissement l'été
               - entity: input_boolean.clim_auto_chaud
                 name: Clim - appoint chauffage
-              - entity: input_number.clim_deshu_delta
-                name: Clim - écart de chauffe pour assécher
-              - entity: input_number.clim_deshu_temp_max
-                name: Clim - température max en assèchement
               - entity: input_number.clim_duree_manuel
                 name: Clim - durée du pilotage manuel
               - entity: input_number.clim_seuil_froid

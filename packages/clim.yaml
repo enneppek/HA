@@ -2,13 +2,15 @@
 # CLIMATISATION PANASONIC (Comfort Cloud) — chambre de Lolo
 #
 # Cette pièce n'a aucun radiateur : la clim y est l'unique source de chaleur.
-# Elle garantit donc deux choses, toutes deux réglables :
-#   - une température minimale       (input_number.clim_temp_min, 15 °C)
-#   - une humidité relative maximale (input_number.clim_seuil_humidite, 65 %)
-# mesurées sur la sonde d'ambiance Sonoff de la pièce.
+# Elle fait deux choses :
+#   - maintenir une température minimale (input_number.clim_temp_min, 15 °C),
+#     mesurée sur la sonde d'ambiance Sonoff de la pièce ;
+#   - assécher la chambre, SUR DEMANDE UNIQUEMENT : un bouton lance la clim
+#     en mode chaud à 24 °C pendant 1 h ou 2 h, puis elle s'arrête seule. Le
+#     mode chaud assèche mieux que `dry` sur cet appareil.
 #
-# Hors de ces deux garanties, elle ne fait rien : le rafraîchissement et
-# l'appoint chauffage existent mais sont des interrupteurs désactivés.
+# Hors de cela, elle ne fait rien : le rafraîchissement et l'appoint
+# chauffage existent mais sont des interrupteurs désactivés.
 #
 # Dès qu'une consigne de température est posée à la main depuis Home Assistant,
 # l'automatisation s'efface et laisse la main, pour quelques heures.
@@ -27,9 +29,9 @@
 # fois par l'automatisation chauffage_initialiser_reglages (chauffage.yaml).
 ################################################################################
 input_boolean:
-  clim_auto_deshu:
-    name: "Clim - déshumidification"
-    icon: mdi:water-percent
+  clim_assechement:
+    name: "Clim - assécher la chambre"
+    icon: mdi:water-off
 
   clim_auto_froid:
     name: "Clim - rafraîchissement (désactivé par défaut)"
@@ -47,33 +49,17 @@ input_boolean:
     name: "Clim - pilotage manuel en cours"
     icon: mdi:hand-back-right
 
+input_select:
+  clim_duree_assechement:
+    name: "Clim - durée de l'assèchement"
+    icon: mdi:timer-outline
+    options:
+      - "1 h"
+      - "2 h"
+
 input_number:
-  clim_seuil_humidite:
-    name: "Clim - seuil de déshumidification"
-    icon: mdi:water-percent
-    min: 50
-    max: 80
-    step: 1
-    unit_of_measurement: "%"
 
-  clim_deshu_delta:
-    # Le mode chaud assèche en abaissant l'humidité relative. Viser un peu
-    # au-dessus de la température ambiante suffit : inutile de surchauffer.
-    name: "Clim - écart de chauffe pour assécher"
-    icon: mdi:thermometer-plus
-    min: 0.5
-    max: 5
-    step: 0.5
-    unit_of_measurement: "°C"
 
-  clim_deshu_temp_max:
-    # Garde-fou : au-delà, on cesse d'assécher plutôt que de cuire la pièce.
-    name: "Clim - température maximale en assèchement"
-    icon: mdi:thermometer-alert
-    min: 18
-    max: 28
-    step: 0.5
-    unit_of_measurement: "°C"
 
   clim_temp_min:
     # La chambre de Lolo n'a pas de radiateur : cette valeur est la seule
@@ -121,10 +107,9 @@ input_number:
 # 2. DÉCISION
 #
 # Priorité décroissante :
-#   1. Sous la température minimale               -> chaud, jusqu'à ce minimum
+#   0. Assèchement demandé (bouton)               -> chaud, 24 °C
 #   2. Rafraîchissement activé, occupant, trop chaud -> froid
 #   3. Appoint activé et pièce confiée à la clim  -> chaud, consigne du moment
-#   4. Trop humide                                -> chaud (assèchement)
 #   5. Sinon                                      -> arrêt
 #
 # L'assèchement passe par le mode CHAUD et non `dry` : sur cette Panasonic,
@@ -153,14 +138,11 @@ template:
             {% set temps = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
             {% set seuil_froid = states('input_number.clim_seuil_froid') | float(default=26) %}
             {% set consigne_ete = states('input_number.clim_consigne_ete') | float(default=25) %}
-            {% set seuil_hum = states('input_number.clim_seuil_humidite') | float(default=65) %}
-            {% set delta = states('input_number.clim_deshu_delta') | float(default=1.5) %}
-            {% set temp_max = states('input_number.clim_deshu_temp_max') | float(default=22) %}
             {% set temp_min = states('input_number.clim_temp_min') | float(default=15) %}
             {% set froid_ok = is_state('input_boolean.clim_auto_froid', 'on') %}
             {% set chaud_ok = is_state('input_boolean.clim_auto_chaud', 'on') %}
-            {% set deshu_ok = is_state('input_boolean.clim_auto_deshu', 'on') %}
             {% set temp_min_ok = is_state('input_boolean.clim_maintien_temp_min', 'on') %}
+            {% set assecher = is_state('input_boolean.clim_assechement', 'on') %}
             {% set ns = namespace(presents=[]) %}
             {% for q in ['leo', 'pablo', 'laurent'] %}
               {% if is_state('input_boolean.presence_' ~ q, 'on') %}
@@ -171,24 +153,18 @@ template:
             {% for p, c in cfg.items() if c.clim %}
               {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
               {% set mesure = temps.get(p) | float(default=20) %}
-              {% set humidite = states(c.humidite) | float(default=0) %}
               {% set cible = consignes.get(p, 15) | float(default=15) %}
-              {# Hystérésis : une fois lancé, l'assèchement continue 5 points
-                 sous le seuil, faute de quoi la clim battrait sans cesse. #}
-              {% set en_cours = states(c.clim) == 'heat' %}
-              {% set assecher = deshu_ok and (humidite > seuil_hum
-                                or (en_cours and humidite > seuil_hum - 5)) %}
-              {% if temp_min_ok and mesure < temp_min %}
+              {# L'assèchement, demandé explicitement, passe devant tout le
+                 reste ; il chauffe à 24 °C, ce qui couvre aussi le minimum. #}
+              {% if assecher %}
+                {% set ordre = {'mode': 'heat', 'temp': 24, 'motif': 'assechement'} %}
+              {% elif temp_min_ok and mesure < temp_min %}
                 {% set ordre = {'mode': 'heat', 'temp': temp_min, 'motif': 'temp_min'} %}
               {% elif froid_ok and occupe and mesure > seuil_froid %}
                 {% set ordre = {'mode': 'cool', 'temp': consigne_ete, 'motif': 'froid'} %}
               {% elif chaud_ok and relais.get(p, 'radiateur') == 'clim'
                       and mesure < (cible + 0.5) %}
                 {% set ordre = {'mode': 'heat', 'temp': cible, 'motif': 'appoint'} %}
-              {% elif assecher and mesure < temp_max %}
-                {% set ordre = {'mode': 'heat',
-                                'temp': [mesure + delta, temp_max] | min,
-                                'motif': 'assechement'} %}
               {% else %}
                 {% set ordre = {'mode': 'off', 'temp': 0, 'motif': 'arret'} %}
               {% endif %}
@@ -229,7 +205,7 @@ automation:
         entity_id:
           - input_boolean.clim_auto_froid
           - input_boolean.clim_auto_chaud
-          - input_boolean.clim_auto_deshu
+          - input_boolean.clim_assechement
           - input_boolean.clim_maintien_temp_min
           - input_boolean.clim_pilotage_manuel
           - input_boolean.presence_laurent
@@ -331,3 +307,46 @@ automation:
       - service: input_boolean.turn_off
         target:
           entity_id: input_boolean.clim_pilotage_manuel
+
+  ##############################################################################
+  # Assèchement à la demande.
+  #
+  # Appuyer sur le bouton est une demande explicite : elle reprend la main
+  # sur un éventuel pilotage manuel en cours, sans quoi rien ne se passerait.
+  ##############################################################################
+  - id: clim_assechement_debut
+    alias: "Clim - lancer l'assèchement"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: input_boolean.clim_assechement
+        to: "on"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.clim_pilotage_manuel
+
+  # Fin au bout de la durée choisie. Vérification chaque minute plutôt qu'un
+  # `delay`, qu'un redémarrage de Home Assistant annulerait.
+  - id: clim_assechement_fin
+    alias: "Clim - arrêter l'assèchement"
+    mode: single
+    trigger:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: homeassistant
+        event: start
+    condition:
+      - condition: state
+        entity_id: input_boolean.clim_assechement
+        state: "on"
+      - condition: template
+        value_template: >-
+          {% set heures = states('input_select.clim_duree_assechement')
+                          | replace(' h', '') | int(default=1) %}
+          {{ (now() - states.input_boolean.clim_assechement.last_changed)
+             .total_seconds() >= heures * 3600 }}
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.clim_assechement
