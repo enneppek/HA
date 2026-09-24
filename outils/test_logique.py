@@ -17,7 +17,7 @@ from jinja2 import Environment
 RACINE = __file__.rsplit('/outils/', 1)[0]
 chauffage = yaml.safe_load(open(RACINE + '/packages/chauffage.yaml', encoding='utf-8'))
 clim_pkg = yaml.safe_load(open(RACINE + '/packages/clim.yaml', encoding='utf-8'))
-carte = yaml.safe_load(open(RACINE + '/tableau_de_bord/carte_chauffage.yaml', encoding='utf-8'))
+carte = yaml.safe_load(open(RACINE + '/tableau_de_bord/dashboard.yaml', encoding='utf-8'))
 
 
 def capteur(paquet, nom):
@@ -33,6 +33,7 @@ TPL_CFG = capteur(chauffage, 'Chauffage configuration')['attributes']['pieces']
 TPL_TEMPS = capteur(chauffage, 'Chauffage températures')['attributes']['temperatures']
 TPL_ORIGINE = capteur(chauffage, 'Chauffage températures')['attributes']['origine']
 TPL_CONSIGNES = capteur(chauffage, 'Chauffage consignes')['attributes']['consignes']
+TPL_HORAIRES = capteur(chauffage, 'Chauffage consignes')['attributes']['horaires']
 TPL_ETAT = capteur(chauffage, 'Chauffage consignes')['state']
 TPL_TEXT = capteur(chauffage, 'Chauffage température extérieure')['state']
 TPL_RELAIS = capteur(chauffage, 'Chauffage relais')['attributes']['relais']
@@ -86,7 +87,7 @@ class Monde:
                  humidites=None, semaine=41, exterieur=12.0,
                  clim_froid=False, clim_chaud=False, clim_deshu=True,
                  temp_min=True, manuel=False, clim_etat='off',
-                 sondes_indispo=(), reglages=None):
+                 sondes_indispo=(), reglages=None, horaires=None):
         # Valeurs par défaut conformes à l'installation : déshumidification
         # seule, froid et appoint chauffage désactivés.
         self.presents = set(presents)
@@ -100,6 +101,9 @@ class Monde:
         self.temp_min, self.manuel, self.clim_etat = temp_min, manuel, clim_etat
         self.sondes_indispo = set(sondes_indispo)
         self.reglages = {**self.REGLAGES, **(reglages or {})}
+        # Planifications créées dans l'interface : {entité: 'on' | 'off'}.
+        # Absentes du dictionnaire, elles n'existent pas.
+        self.horaires = horaires or {}
         self.pieces = PIECES
         self.temperatures = self.origine = None
         self.consignes = self.relais = self.ordres = None
@@ -110,8 +114,9 @@ class Monde:
         return self.temps.get(piece, 18.0)
 
     def states(self, eid):
-        if eid is None:
-            raise TypeError("states(None) : Home Assistant lève ici une erreur")
+        if eid is None or '.' not in str(eid):
+            raise TypeError(f"identifiant d'entité invalide : {eid!r} "
+                            "(Home Assistant lève ici une erreur)")
         if eid in self.reglages:
             return str(self.reglages[eid])
         if eid in PIECE_PAR_SONDE:
@@ -131,6 +136,8 @@ class Monde:
             return 'on' if self.demande else 'off'
         if eid == 'schedule.chauffage':
             return 'on' if self.horaire else 'off'
+        if eid.startswith('schedule.'):
+            return self.horaires.get(eid, 'unknown')
         if eid == 'input_boolean.clim_maintien_temp_min':
             return 'on' if self.temp_min else 'off'
         if eid == 'input_boolean.clim_pilotage_manuel':
@@ -156,6 +163,7 @@ class Monde:
             ('sensor.chauffage_temperatures', 'temperatures'): self.temperatures,
             ('sensor.chauffage_temperatures', 'origine'): self.origine,
             ('sensor.chauffage_consignes', 'consignes'): self.consignes,
+            ('sensor.chauffage_consignes', 'horaires'): getattr(self, 'horaires_utilises', None),
             ('sensor.chauffage_relais', 'relais'): self.relais,
             ('sensor.clim_pilotage', 'ordres'): self.ordres,
         }.get((eid, attr))
@@ -174,6 +182,7 @@ def evaluer(m):
     m.temperatures = eval(rendre(TPL_TEMPS, m))
     m.origine = eval(rendre(TPL_ORIGINE, m))
     m.consignes = eval(rendre(TPL_CONSIGNES, m))
+    m.horaires_utilises = eval(rendre(TPL_HORAIRES, m))
     m.text = float(rendre(TPL_TEXT, m))
     m.relais = eval(rendre(TPL_RELAIS, m))
     m.demande = rendre(TPL_DEMANDE, m) == 'True'
@@ -253,6 +262,7 @@ for scenario in ('maison pleine', 'maison vide'):
         m_carte.temperatures = eval(rendre(TPL_TEMPS, m_carte))
         m_carte.origine = eval(rendre(TPL_ORIGINE, m_carte))
         m_carte.consignes = eval(rendre(TPL_CONSIGNES, m_carte))
+        m_carte.horaires_utilises = eval(rendre(TPL_HORAIRES, m_carte))
         m_carte.text = float(rendre(TPL_TEXT, m_carte))
         m_carte.relais = eval(rendre(TPL_RELAIS, m_carte))
         m_carte.ordres = eval(rendre(TPL_ORDRES, m_carte))
@@ -262,6 +272,38 @@ for scenario in ('maison pleine', 'maison vide'):
         ok = False
         print(f"         {e}")
     verifier(f"toutes les sections se rendent ({scenario})", ok, True)
+
+import unicodedata
+
+
+def slug(texte):
+    texte = unicodedata.normalize('NFKD', texte).encode('ascii', 'ignore').decode()
+    return ''.join(ch if ch.isalnum() else '_' for ch in texte.lower()).strip('_').replace('__', '_')
+
+
+def entites_referencees(noeud):
+    if isinstance(noeud, dict):
+        if isinstance(noeud.get('entity'), str):
+            yield noeud['entity']
+        for valeur in noeud.values():
+            yield from entites_referencees(valeur)
+    elif isinstance(noeud, list):
+        for valeur in noeud:
+            yield from entites_referencees(valeur)
+
+
+connues = set()
+for paquet in (chauffage, clim_pkg):
+    for domaine in ('input_boolean', 'input_number', 'input_select', 'schedule'):
+        connues |= {f"{domaine}.{cle}" for cle in (paquet.get(domaine) or {})}
+    for bloc in paquet.get('template', []):
+        for domaine in ('sensor', 'binary_sensor'):
+            connues |= {f"{domaine}.{slug(c['name'])}" for c in bloc.get(domaine, [])}
+for c in PIECES.values():
+    connues |= set(c['vannes']) | {c['sonde'], c['humidite'], c['clim']} - {None}
+connues |= {'climate.thermostat_thermostat', 'schedule.chauffage_commun'}
+inconnues = sorted(set(entites_referencees(carte)) - connues)
+verifier("toutes les entités de la carte existent", inconnues, [])
 
 titre("Cohérence du bloc `pieces`")
 verifier("sept pièces déclarées", len(PIECES), 7)
@@ -317,6 +359,49 @@ verifier("semaine impaire : SdB enfants au confort", m.consignes['sdb_enfants'],
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], horaire=False, semaine=41))
 verifier("hors horaire : repli de nuit", m.consignes['chambre_leo'], 17.0)
+
+titre("Réglages par pièce")
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
+                  reglages={'input_number.chauffage_chambre_leo_confort': 21.0}))
+verifier("confort de Léo réglé à 21° : pris en compte", m.consignes['chambre_leo'], 21.0)
+verifier("  -> sans toucher à Pablo", m.consignes['chambre_pablo'], 19.5)
+
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=False,
+                  reglages={'input_number.chauffage_salon_nuit': 16.0}))
+verifier("nuit du salon réglée à 16° : prise en compte", m.consignes['salon'], 16.0)
+
+m = evaluer(Monde(presents=['laurent'], semaine=40,
+                  reglages={'input_number.chauffage_absence': 16.5}))
+verifier("absence réglée à 16,5° : appliquée aux chambres vides",
+         m.consignes['chambre_leo'], 16.5)
+
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41))
+verifier("réglage jamais posé : repli sur la valeur du bloc `pieces`",
+         m.consignes['cuisine'], 19.0)
+
+titre("Horaires modifiables")
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=True))
+verifier("aucune planification créée : horaire par défaut",
+         m.horaires_utilises['salon'], 'schedule.chauffage')
+
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=True,
+                  horaires={'schedule.chauffage_commun': 'off'}))
+verifier("horaire commun créé : il remplace celui par défaut",
+         m.horaires_utilises['salon'], 'schedule.chauffage_commun')
+verifier("  -> commun hors horaire : salon en nuit", m.consignes['salon'], 17.5)
+
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=True,
+                  horaires={'schedule.chauffage_commun': 'off',
+                            'schedule.chauffage_salon': 'on'}))
+verifier("horaire propre au salon : il prime sur le commun",
+         m.horaires_utilises['salon'], 'schedule.chauffage_salon')
+verifier("  -> salon au confort", m.consignes['salon'], 20.5)
+verifier("  -> la cuisine reste sur le commun, en nuit", m.consignes['cuisine'], 16.5)
+
+m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
+                  horaires={'schedule.chauffage_commun': 'unavailable'}))
+verifier("horaire commun indisponible : retour à l'horaire par défaut",
+         m.horaires_utilises['cuisine'], 'schedule.chauffage')
 
 titre("Pièces communes")
 m = evaluer(Monde(presents=['leo'], semaine=41))

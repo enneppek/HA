@@ -27,9 +27,15 @@ depuis une machine du réseau local, qui elle a accès à l'instance.
 
 ### Première mise en service
 
-Aucun `initial:` n'est posé sur les interrupteurs, afin qu'un redémarrage
-n'écrase pas tes choix. Après la première installation, pense donc à activer
-**Limiter l'humidité** et **Maintenir une température minimale** sur la carte.
+Aucun réglage ne porte de `initial:` : Home Assistant réimposerait sinon
+cette valeur à chaque redémarrage, effaçant ce qui a été réglé depuis la
+carte. Les valeurs de départ sont posées **une seule fois**, au premier
+démarrage, par l'automatisation `chauffage_initialiser_reglages`. Elle active
+aussi la présence de Laurent, « Limiter l'humidité » et « Maintenir une
+température minimale ».
+
+Pour revenir aux valeurs d'usine : éteindre
+`input_boolean.chauffage_reglages_initialises`, puis redémarrer.
 
 ### Mise en place sur une machine du LAN
 
@@ -118,7 +124,7 @@ résultat dans `inventaire.md`.
 ```
 packages/chauffage.yaml            Chauffage : consignes, arbitrage, chaudière
 packages/clim.yaml                 Climatisation Panasonic
-tableau_de_bord/carte_chauffage.yaml  Carte Lovelace
+tableau_de_bord/dashboard.yaml      Tableau de bord, lu par HA en mode YAML
 outils/export_entites.jinja        Modèle d'export des entités
 outils/test_logique.py             Banc d'essai de la logique
 ```
@@ -223,13 +229,60 @@ La bascule est automatique chaque nuit à 00h05. Les vacances scolaires ne
 suivent pas la parité : `input_select.garde_enfants` permet de forcer
 **Présents** ou **Absents** sans toucher au YAML.
 
-### Commandes de la carte
+### Le tableau de bord
 
+- **Vue d'ensemble** — pour chaque pièce : mesure, consigne en cours, et
+  horaire suivi (commun ou propre), avec son état.
 - **Léo / Pablo / Laurent** — présence de chacun. Éteindre Léo ramène sa
-  chambre à 15 °C ; la salle de bains enfants reste chaude tant que Pablo
-  est présent, puisqu'elle a deux occupants.
-- **Un bouton par pièce** — force la température de confort, puis se coupe
-  seul au bout de la durée réglée (2 h par défaut).
+  chambre à la température d'absence ; la salle de bains enfants reste
+  chaude tant que Pablo est présent, puisqu'elle a deux occupants.
+- **Une carte par pièce** — températures de confort et de nuit réglables, et
+  un bouton qui force le confort immédiatement, puis se coupe seul au bout de
+  la durée réglée (2 h par défaut).
+- **Horaires** — voir ci-dessous.
+
+### Réglages par pièce
+
+Chaque pièce à radiateur a deux réglages, `input_number.chauffage_<pièce>_confort`
+et `_nuit`. Les valeurs du bloc `pieces` ne servent plus que de repli, si un
+réglage est indisponible. La température d'absence, elle, est commune à
+toute la maison (`input_number.chauffage_absence`).
+
+La chambre de Lolo n'a pas ces réglages : sa clim n'y chauffe pas, sauf à
+activer l'appoint chauffage. Elle ne tient que ses deux garanties,
+température minimale et humidité maximale.
+
+### Horaires
+
+Une planification définie en YAML n'est pas modifiable dans l'interface. Les
+horaires se créent donc dans Home Assistant (*Paramètres → Appareils et
+services → Entrées → Créer une entrée → Planification*), où l'on dessine les
+plages à la souris sur une grille hebdomadaire.
+
+Chaque pièce cherche, dans l'ordre :
+
+1. sa planification propre, `schedule.chauffage_<pièce>` ;
+2. l'horaire commun, `schedule.chauffage_commun` ;
+3. l'horaire par défaut, défini en YAML et non modifiable, qui n'est qu'un
+   filet de sécurité.
+
+L'identifiant est tiré du nom saisi à la création : il faut donc taper le
+nom exact.
+
+| Pour | Nom à saisir |
+|---|---|
+| Toute la maison | `Chauffage commun` |
+| Chambre Léo | `Chauffage chambre leo` |
+| Chambre Pablo | `Chauffage chambre pablo` |
+| Salle de bains enfants | `Chauffage sdb enfants` |
+| Chambre Lolo | `Chauffage chambre laurent` |
+| Boulangerie | `Chauffage boulangerie` |
+| Cuisine | `Chauffage cuisine` |
+| Salon | `Chauffage salon` |
+
+Une planification créée est prise en compte d'elle-même, sans redémarrage :
+la vue d'ensemble indique « propre » en face de la pièce. Une fois créée, son
+nom affiché peut être changé librement ; seul l'identifiant compte.
 
 ## Déploiement
 

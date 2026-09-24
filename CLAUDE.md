@@ -93,9 +93,21 @@ Package actif depuis le 24/09/2026 : tous les capteurs `sensor.chauffage_*`
 ont une valeur, la sonde `t_hr` de Léo est revenue. Calendrier de garde
 confirmé : semaine impaire = enfants présents.
 
+## Réglages et horaires
+
+- Confort et nuit par pièce : `input_number.chauffage_<pièce>_confort` / `_nuit` ;
+  absence commune : `input_number.chauffage_absence`.
+- Aucun `initial:` : les valeurs de départ sont posées une seule fois par
+  `chauffage_initialiser_reglages`, verrouillée par
+  `input_boolean.chauffage_reglages_initialises`.
+- Horaires créés dans l'interface (modifiables) : `schedule.chauffage_<pièce>`,
+  sinon `schedule.chauffage_commun`, sinon `schedule.chauffage` (YAML, secours).
+  L'attribut `horaires` de `sensor.chauffage_consignes` indique lequel chaque
+  pièce suit.
+
 ## En suspens
 
 - Lyric T6 à passer en maintien permanent.
-- Interrupteurs à activer après le premier démarrage : présence Laurent,
-  « Limiter l'humidité », « Maintenir une température minimale ».
+- Créer l'horaire commun dans l'interface : planification nommée
+  `Chauffage commun`.
 - Add-on Tailscale qui ne redémarre plus ; statut d'un éventuel essai Nabu Casa.

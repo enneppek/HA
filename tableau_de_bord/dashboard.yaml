@@ -1,14 +1,278 @@
 # Tableau de bord « Chauffage », en mode YAML.
 #
 # Home Assistant le lit directement dans ce dépôt, cloné sous
-# /config/claude-ha : aucun copier-coller dans l'interface, et un `git pull`
-# suffit à le mettre à jour. Déclaré dans configuration.yaml sous
-# `lovelace: dashboards:` (voir le README).
+# /config/claude-ha : aucun copier-coller dans l'interface. Après un
+# `git pull`, il suffit de rafraîchir la page du navigateur.
+# Déclaré dans configuration.yaml sous `lovelace: dashboards:` (voir README).
+#
+# Les sections markdown utilisent des blocs littéraux (`|`) et le contrôle
+# d'espaces de Jinja (`{%-`) : un bloc replié (`>-`) fusionnerait les lignes
+# et casserait tableaux et listes.
 title: Chauffage
 views:
   - title: Chauffage
     path: chauffage
     icon: mdi:radiator
-    type: panel
     cards:
-      - !include carte_chauffage.yaml
+      # --- Vue d'ensemble ---------------------------------------------------
+      - type: markdown
+        content: |
+          {% set c = state_attr('sensor.chauffage_consignes', 'consignes') or {} %}
+          {% set h = state_attr('sensor.chauffage_consignes', 'horaires') or {} %}
+          {% set t = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
+          {% set o = state_attr('sensor.chauffage_temperatures', 'origine') or {} %}
+          {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+          ## Chauffage
+
+          Semaine {{ state_attr('sensor.chauffage_consignes', 'semaine_numero') }} :
+          {{ 'enfants absents' if state_attr('sensor.chauffage_consignes', 'semaine_paire') else 'enfants présents' }}
+          {%- if is_state('binary_sensor.chauffage_demande_chaudiere', 'on') %}
+          · 🔥 chaudière en marche
+          {%- else %}
+          · chaudière au repos
+          {%- endif %}
+
+          | Pièce | Mesure | Consigne | Horaire |
+          |:--|--:|--:|:--|
+          {%- for p, cible in c.items() %}
+          {%- set hp = h.get(p, 'schedule.chauffage') %}
+          | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \*' if o.get(p) == 'vannes' else '' }} | **{{ cible }} °C** | {{ '🟢' if is_state(hp, 'on') else '⚪' }} {{ 'propre' if hp == 'schedule.chauffage_' ~ p else 'commun' }} |
+          {%- endfor %}
+
+          \* mesurée par les vannes, faute de sonde dans la pièce.
+          🟢 dans l'horaire (confort) · ⚪ hors horaire (nuit)
+
+      # --- Qui est à la maison ----------------------------------------------
+      - type: vertical-stack
+        cards:
+          - type: heading
+            heading: Qui est à la maison ?
+          - type: grid
+            columns: 3
+            square: false
+            cards:
+              - type: button
+                entity: input_boolean.presence_leo
+                name: Léo
+                icon: mdi:account
+                show_state: true
+                tap_action:
+                  action: toggle
+              - type: button
+                entity: input_boolean.presence_pablo
+                name: Pablo
+                icon: mdi:account
+                show_state: true
+                tap_action:
+                  action: toggle
+              - type: button
+                entity: input_boolean.presence_laurent
+                name: Laurent
+                icon: mdi:account
+                show_state: true
+                tap_action:
+                  action: toggle
+          - type: entities
+            entities:
+              - entity: input_select.garde_enfants
+                name: Garde des enfants
+
+      # --- Horaires ---------------------------------------------------------
+      - type: vertical-stack
+        cards:
+          - type: heading
+            heading: Horaires
+          - type: entities
+            entities:
+              - entity: schedule.chauffage_commun
+                name: Horaire commun (clic pour modifier)
+          - type: markdown
+            content: |
+              Toutes les pièces suivent l'**horaire commun**. Pour qu'une pièce
+              ait ses propres heures, crée une planification portant **exactement**
+              le nom ci-dessous : elle sera prise en compte d'elle-même.
+
+              *Paramètres → Appareils et services → Entrées → Créer une entrée → Planification*
+
+              | Pièce | Nom à saisir |
+              |:--|:--|
+              | Toute la maison | `Chauffage commun` |
+              | Chambre Léo | `Chauffage chambre leo` |
+              | Chambre Pablo | `Chauffage chambre pablo` |
+              | Salle de bains enfants | `Chauffage sdb enfants` |
+              | Chambre Lolo | `Chauffage chambre laurent` |
+              | Boulangerie | `Chauffage boulangerie` |
+              | Cuisine | `Chauffage cuisine` |
+              | Salon | `Chauffage salon` |
+          - type: button
+            name: Ouvrir les planifications
+            icon: mdi:calendar-edit
+            tap_action:
+              action: navigate
+              navigation_path: /config/helpers
+
+      # --- Réglages de chaque pièce -----------------------------------------
+      # « Confort » s'applique pendant l'horaire, « nuit » en dehors, tant
+      # qu'un occupant de la pièce est présent. Sans occupant : température
+      # d'absence, commune à toute la maison (carte Réglages).
+
+      - type: entities
+        title: Chambre Léo
+        icon: mdi:bed
+        state_color: true
+        entities:
+          - entity: input_boolean.confort_chambre_leo
+            name: Forcer le confort maintenant
+          - entity: input_number.chauffage_chambre_leo_confort
+            name: Température de confort
+          - entity: input_number.chauffage_chambre_leo_nuit
+            name: Température de nuit
+
+      - type: entities
+        title: Chambre Pablo
+        icon: mdi:bed
+        state_color: true
+        entities:
+          - entity: input_boolean.confort_chambre_pablo
+            name: Forcer le confort maintenant
+          - entity: input_number.chauffage_chambre_pablo_confort
+            name: Température de confort
+          - entity: input_number.chauffage_chambre_pablo_nuit
+            name: Température de nuit
+
+      - type: entities
+        title: Salle de bains enfants
+        icon: mdi:shower
+        state_color: true
+        entities:
+          - entity: input_boolean.confort_sdb_enfants
+            name: Forcer le confort maintenant
+          - entity: input_number.chauffage_sdb_enfants_confort
+            name: Température de confort
+          - entity: input_number.chauffage_sdb_enfants_nuit
+            name: Température de nuit
+
+      - type: entities
+        title: Boulangerie
+        icon: mdi:bread-slice
+        state_color: true
+        entities:
+          - entity: input_boolean.confort_boulangerie
+            name: Forcer le confort maintenant
+          - entity: input_number.chauffage_boulangerie_confort
+            name: Température de confort
+          - entity: input_number.chauffage_boulangerie_nuit
+            name: Température de nuit
+
+      - type: entities
+        title: Cuisine
+        icon: mdi:silverware-fork-knife
+        state_color: true
+        entities:
+          - entity: input_boolean.confort_cuisine
+            name: Forcer le confort maintenant
+          - entity: input_number.chauffage_cuisine_confort
+            name: Température de confort
+          - entity: input_number.chauffage_cuisine_nuit
+            name: Température de nuit
+
+      - type: entities
+        title: Salon
+        icon: mdi:sofa
+        state_color: true
+        entities:
+          - entity: input_boolean.confort_salon
+            name: Forcer le confort maintenant
+          - entity: input_number.chauffage_salon_confort
+            name: Température de confort
+          - entity: input_number.chauffage_salon_nuit
+            name: Température de nuit
+
+      # --- Chambre de Lolo : clim seule -------------------------------------
+      - type: entities
+        title: Chambre Lolo (clim seule)
+        icon: mdi:air-conditioner
+        state_color: true
+        entities:
+          - entity: climate.clim_chambre
+            name: Climatisation
+          - entity: sensor.sonoff_snzb_02d_temperature
+            name: Température
+          - entity: sensor.sonoff_snzb_02d_humidite
+            name: Humidité
+          - type: divider
+          - entity: input_boolean.clim_auto_deshu
+            name: Limiter l'humidité
+          - entity: input_number.clim_seuil_humidite
+            name: Humidité maximale
+          - type: divider
+          - entity: input_boolean.clim_maintien_temp_min
+            name: Maintenir une température minimale
+          - entity: input_number.clim_temp_min
+            name: Température minimale
+          - type: divider
+          - entity: input_boolean.clim_pilotage_manuel
+            name: Pilotage manuel en cours
+          - entity: input_boolean.clim_auto_froid
+            name: Rafraîchissement (optionnel)
+          - entity: input_boolean.clim_auto_chaud
+            name: Appoint chauffage (optionnel)
+
+      - type: markdown
+        content: |
+          {% set o = state_attr('sensor.clim_pilotage', 'ordres') or {} %}
+          {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+          {% set libelles = {'cool': 'froid', 'heat': 'chaud', 'dry': 'déshumidification', 'off': 'arrêt'} %}
+          **Clim : décision en cours**
+          {% for piece, ordre in o.items() %}
+          - {{ cfg.get(piece, {}).get('nom', piece) }} : **{{ libelles.get(ordre.mode, ordre.mode) }}**
+          {%- if ordre.temp %} à {{ ordre.temp }} °C{% endif %}
+          {% endfor %}
+          {%- if is_state('input_boolean.clim_pilotage_manuel', 'on') %}
+          ✋ **Pilotage manuel** : l'automatisation reprendra la main d'elle-même.
+          {% endif %}
+          Garanties : au moins {{ states('input_number.clim_temp_min') }} °C,
+          au plus {{ states('input_number.clim_seuil_humidite') }} % d'humidité.
+          Extérieur : {{ states('sensor.chauffage_temperature_exterieure') }} °C.
+
+      # --- Chaudière --------------------------------------------------------
+      - type: entities
+        title: Chaudière
+        icon: mdi:fire
+        entities:
+          - entity: climate.thermostat_thermostat
+            name: Lyric T6 (relais)
+          - entity: sensor.chauffage_consigne_chaudiere
+            name: Consigne envoyée au T6
+          - entity: binary_sensor.chauffage_demande_chaudiere
+            name: Demande en cours
+
+      # --- Réglages ---------------------------------------------------------
+      - type: entities
+        title: Réglages
+        icon: mdi:tune
+        entities:
+          - entity: input_number.chauffage_absence
+            name: Température d'absence
+          - entity: input_number.duree_confort
+            name: Durée d'un appui confort
+          - entity: schedule.chauffage
+            name: Horaire par défaut (secours)
+          - type: divider
+          - entity: input_number.chaudiere_consigne_marche
+            name: Chaudière - consigne d'appel
+          - entity: input_number.chaudiere_consigne_arret
+            name: Chaudière - consigne de repos
+          - type: divider
+          - entity: input_number.clim_deshu_delta
+            name: Clim - écart de chauffe pour assécher
+          - entity: input_number.clim_deshu_temp_max
+            name: Clim - température max en assèchement
+          - entity: input_number.clim_duree_manuel
+            name: Clim - durée de la main laissée
+          - entity: input_number.clim_seuil_froid
+            name: Clim - déclenchement du froid
+          - entity: input_number.clim_consigne_ete
+            name: Clim - consigne d'été
+          - entity: input_number.clim_seuil_pac
+            name: Clim - extérieur mini pour l'appoint

@@ -175,6 +175,16 @@ template:
   #   2. Un occupant présent + horaire actif    -> température de confort
   #   3. Un occupant présent, hors horaire      -> température de nuit
   #   4. Aucun occupant présent                 -> température d'absence (15°)
+  #
+  # Confort et nuit se règlent pièce par pièce depuis la carte
+  # (input_number.chauffage_<pièce>_confort / _nuit) ; les valeurs du bloc
+  # `pieces` ne servent que de repli. L'absence est commune à toute la maison.
+  #
+  # Horaire : chaque pièce suit sa propre planification si elle existe
+  # (schedule.chauffage_<pièce>, créée dans l'interface), sinon l'horaire
+  # commun (schedule.chauffage_commun, créé dans l'interface), sinon l'horaire
+  # par défaut défini plus bas en YAML. Seules les planifications créées dans
+  # l'interface sont modifiables à la souris ; celle en YAML ne l'est pas.
   ##############################################################################
   - sensor:
       - name: "Chauffage consignes"
@@ -188,16 +198,28 @@ template:
               {% set ns.presents = ns.presents + [q] %}
             {% endif %}
           {% endfor %}
-          {% set horaire = is_state('schedule.chauffage', 'on') %}
-          {% set nt = namespace(maxi=0) %}
+          {% set commun = 'schedule.chauffage_commun'
+             if states('schedule.chauffage_commun') in ['on', 'off']
+             else 'schedule.chauffage' %}
+          {% set nd = namespace(consignes={}, horaires={}) %}
           {% for p, c in cfg.items() %}
             {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
             {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
-            {% set t = c.confort if (boost or (occupe and horaire))
-                       else (c.nuit if occupe else c.absence) %}
-            {% if t | float > nt.maxi %}{% set nt.maxi = t | float %}{% endif %}
+            {% set confort = states('input_number.chauffage_' ~ p ~ '_confort')
+                             | float(default=c.confort) %}
+            {% set nuit = states('input_number.chauffage_' ~ p ~ '_nuit')
+                          | float(default=c.nuit) %}
+            {% set absence = states('input_number.chauffage_absence')
+                             | float(default=c.absence) %}
+            {% set propre = 'schedule.chauffage_' ~ p %}
+            {% set h = propre if states(propre) in ['on', 'off'] else commun %}
+            {% set horaire = is_state(h, 'on') %}
+            {% set t = confort if (boost or (occupe and horaire))
+                       else (nuit if occupe else absence) %}
+            {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+            {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
           {% endfor %}
-          {{ nt.maxi }}
+          {{ nd.consignes.values() | max if nd.consignes else 0 }}
         attributes:
           consignes: >-
             {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
@@ -207,17 +229,63 @@ template:
                 {% set ns.presents = ns.presents + [q] %}
               {% endif %}
             {% endfor %}
-            {% set horaire = is_state('schedule.chauffage', 'on') %}
-            {% set nd = namespace(d={}) %}
+            {% set commun = 'schedule.chauffage_commun'
+               if states('schedule.chauffage_commun') in ['on', 'off']
+               else 'schedule.chauffage' %}
+            {% set nd = namespace(consignes={}, horaires={}) %}
             {% for p, c in cfg.items() %}
               {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
               {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
-              {% set t = c.confort if (boost or (occupe and horaire))
-                         else (c.nuit if occupe else c.absence) %}
-              {% set nd.d = dict(nd.d.items() | list + [(p, t | float)]) %}
+              {% set confort = states('input_number.chauffage_' ~ p ~ '_confort')
+                               | float(default=c.confort) %}
+              {% set nuit = states('input_number.chauffage_' ~ p ~ '_nuit')
+                            | float(default=c.nuit) %}
+              {% set absence = states('input_number.chauffage_absence')
+                               | float(default=c.absence) %}
+              {% set propre = 'schedule.chauffage_' ~ p %}
+              {% set h = propre if states(propre) in ['on', 'off'] else commun %}
+              {% set horaire = is_state(h, 'on') %}
+              {% set t = confort if (boost or (occupe and horaire))
+                         else (nuit if occupe else absence) %}
+              {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+              {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
             {% endfor %}
-            {{ nd.d }}
-          horaire_actif: "{{ is_state('schedule.chauffage', 'on') }}"
+            {{ nd.consignes }}
+          horaires: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set ns = namespace(presents=[]) %}
+            {% for q in ['leo', 'pablo', 'laurent'] %}
+              {% if is_state('input_boolean.presence_' ~ q, 'on') %}
+                {% set ns.presents = ns.presents + [q] %}
+              {% endif %}
+            {% endfor %}
+            {% set commun = 'schedule.chauffage_commun'
+               if states('schedule.chauffage_commun') in ['on', 'off']
+               else 'schedule.chauffage' %}
+            {% set nd = namespace(consignes={}, horaires={}) %}
+            {% for p, c in cfg.items() %}
+              {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
+              {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
+              {% set confort = states('input_number.chauffage_' ~ p ~ '_confort')
+                               | float(default=c.confort) %}
+              {% set nuit = states('input_number.chauffage_' ~ p ~ '_nuit')
+                            | float(default=c.nuit) %}
+              {% set absence = states('input_number.chauffage_absence')
+                               | float(default=c.absence) %}
+              {% set propre = 'schedule.chauffage_' ~ p %}
+              {% set h = propre if states(propre) in ['on', 'off'] else commun %}
+              {% set horaire = is_state(h, 'on') %}
+              {% set t = confort if (boost or (occupe and horaire))
+                         else (nuit if occupe else absence) %}
+              {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+              {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
+            {% endfor %}
+            {{ nd.horaires }}
+          horaire_actif: >-
+            {% set commun = 'schedule.chauffage_commun'
+               if states('schedule.chauffage_commun') in ['on', 'off']
+               else 'schedule.chauffage' %}
+            {{ is_state(commun, 'on') }}
           semaine_numero: "{{ now().isocalendar()[1] }}"
           semaine_paire: "{{ now().isocalendar()[1] % 2 == 0 }}"
 
@@ -350,7 +418,7 @@ template:
 ################################################################################
 schedule:
   chauffage:
-    name: "Chauffage - horaire"
+    name: "Chauffage - horaire par défaut (non modifiable)"
     icon: mdi:calendar-clock
     monday: &semaine
       - from: "06:00:00"
@@ -376,6 +444,10 @@ schedule:
 # 9. COMMANDES — présence, confort par pièce, mode de garde
 ################################################################################
 input_boolean:
+  chauffage_reglages_initialises:
+    name: "Chauffage - réglages initialisés"
+    icon: mdi:check-decagram
+
   presence_leo:
     name: "Léo"
     icon: mdi:account
@@ -418,9 +490,117 @@ input_select:
       - "Automatique (parité)"
       - "Présents"
       - "Absents"
-    initial: "Automatique (parité)"
 
 input_number:
+  # --- Températures par pièce -------------------------------------------
+  # Pas de `initial:` : HA restaurerait sinon cette valeur à chaque
+  # redémarrage, effaçant tout réglage fait depuis la carte. Les valeurs de
+  # départ sont posées une seule fois par l'automatisation
+  # chauffage_initialiser_reglages.
+  chauffage_absence:
+    name: "Température d'absence (toute la maison)"
+    icon: mdi:home-export-outline
+    min: 7
+    max: 18
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_chambre_leo_confort:
+    name: "Chambre Léo - confort"
+    icon: mdi:sofa
+    min: 15
+    max: 24
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_chambre_leo_nuit:
+    name: "Chambre Léo - nuit"
+    icon: mdi:weather-night
+    min: 12
+    max: 22
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_chambre_pablo_confort:
+    name: "Chambre Pablo - confort"
+    icon: mdi:sofa
+    min: 15
+    max: 24
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_chambre_pablo_nuit:
+    name: "Chambre Pablo - nuit"
+    icon: mdi:weather-night
+    min: 12
+    max: 22
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_sdb_enfants_confort:
+    name: "Salle de bains enfants - confort"
+    icon: mdi:sofa
+    min: 15
+    max: 24
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_sdb_enfants_nuit:
+    name: "Salle de bains enfants - nuit"
+    icon: mdi:weather-night
+    min: 12
+    max: 22
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_boulangerie_confort:
+    name: "Boulangerie - confort"
+    icon: mdi:sofa
+    min: 15
+    max: 24
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_boulangerie_nuit:
+    name: "Boulangerie - nuit"
+    icon: mdi:weather-night
+    min: 12
+    max: 22
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_cuisine_confort:
+    name: "Cuisine - confort"
+    icon: mdi:sofa
+    min: 15
+    max: 24
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_cuisine_nuit:
+    name: "Cuisine - nuit"
+    icon: mdi:weather-night
+    min: 12
+    max: 22
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_salon_confort:
+    name: "Salon - confort"
+    icon: mdi:sofa
+    min: 15
+    max: 24
+    step: 0.5
+    unit_of_measurement: "°C"
+
+  chauffage_salon_nuit:
+    name: "Salon - nuit"
+    icon: mdi:weather-night
+    min: 12
+    max: 22
+    step: 0.5
+    unit_of_measurement: "°C"
+
   # Le Lyric T6 est installé dans la CUISINE. Tel quel, il régule sur la
   # température de cette seule pièce et coupe le brûleur dès qu'elle est
   # satisfaite — privant de chaleur toute la maison. On le détourne donc en
@@ -441,7 +621,6 @@ input_number:
     max: 32
     step: 0.5
     unit_of_measurement: "°C"
-    initial: 24
 
   chaudiere_consigne_arret:
     name: "Chaudière - consigne de repos"
@@ -450,7 +629,6 @@ input_number:
     max: 16
     step: 0.5
     unit_of_measurement: "°C"
-    initial: 10
 
   duree_confort:
     name: "Durée d'un appui confort"
@@ -459,7 +637,6 @@ input_number:
     max: 480
     step: 30
     unit_of_measurement: min
-    initial: 120
 
 ################################################################################
 # 10. AUTOMATISATIONS
@@ -487,7 +664,30 @@ automation:
           - input_boolean.confort_boulangerie
           - input_boolean.confort_cuisine
           - input_boolean.confort_salon
+          - input_number.chauffage_absence
+          - input_number.chauffage_chambre_leo_confort
+          - input_number.chauffage_chambre_leo_nuit
+          - input_number.chauffage_chambre_pablo_confort
+          - input_number.chauffage_chambre_pablo_nuit
+          - input_number.chauffage_sdb_enfants_confort
+          - input_number.chauffage_sdb_enfants_nuit
+          - input_number.chauffage_boulangerie_confort
+          - input_number.chauffage_boulangerie_nuit
+          - input_number.chauffage_cuisine_confort
+          - input_number.chauffage_cuisine_nuit
+          - input_number.chauffage_salon_confort
+          - input_number.chauffage_salon_nuit
+          # Horaires : par défaut, commun, puis propres à chaque pièce. Un
+          # déclencheur sur une planification pas encore créée ne fait rien.
           - schedule.chauffage
+          - schedule.chauffage_commun
+          - schedule.chauffage_chambre_leo
+          - schedule.chauffage_chambre_pablo
+          - schedule.chauffage_sdb_enfants
+          - schedule.chauffage_chambre_laurent
+          - schedule.chauffage_boulangerie
+          - schedule.chauffage_cuisine
+          - schedule.chauffage_salon
       - platform: time_pattern
         minutes: "/15"          # resynchronisation : une vanne peut rater un ordre Zigbee
       - platform: homeassistant
@@ -514,7 +714,8 @@ automation:
                                 or {})[repeat.item] %}
                   {# Si la clim chauffe la pièce, la vanne se referme pour ne pas
                      faire tourner la chaudière en double. #}
-                  {{ cfg.absence | float(default=15)
+                  {{ states('input_number.chauffage_absence')
+                     | float(default=cfg.absence | float(default=15))
                      if (state_attr('sensor.chauffage_relais', 'relais')
                          or {}).get(repeat.item, 'radiateur') == 'clim'
                      else c }}
@@ -703,3 +904,69 @@ automation:
                               entity_id: "{{ repeat.item }}"
                             data:
                               value: "{{ mesure | float }}"
+
+  ##############################################################################
+  # Initialisation des réglages, une seule fois.
+  #
+  # Les réglages n'ont pas de `initial:`, pour que HA restaure à chaque
+  # redémarrage la dernière valeur choisie. Il faut donc poser les valeurs de
+  # départ une fois, à la première mise en service : c'est le rôle de cette
+  # automatisation, verrouillée ensuite par chauffage_reglages_initialises.
+  #
+  # Pour revenir aux valeurs d'usine : éteindre cet interrupteur, puis
+  # redémarrer Home Assistant.
+  ##############################################################################
+  - id: chauffage_initialiser_reglages
+    alias: "Chauffage - initialiser les réglages (une seule fois)"
+    mode: single
+    trigger:
+      - platform: homeassistant
+        event: start
+    condition:
+      - condition: state
+        entity_id: input_boolean.chauffage_reglages_initialises
+        state: "off"
+    action:
+      - repeat:
+          for_each:
+            - {entite: input_number.chauffage_absence, valeur: 15}
+            - {entite: input_number.chauffage_chambre_leo_confort, valeur: 19.5}
+            - {entite: input_number.chauffage_chambre_leo_nuit, valeur: 17.0}
+            - {entite: input_number.chauffage_chambre_pablo_confort, valeur: 19.5}
+            - {entite: input_number.chauffage_chambre_pablo_nuit, valeur: 17.0}
+            - {entite: input_number.chauffage_sdb_enfants_confort, valeur: 21.0}
+            - {entite: input_number.chauffage_sdb_enfants_nuit, valeur: 18.0}
+            - {entite: input_number.chauffage_boulangerie_confort, valeur: 19.0}
+            - {entite: input_number.chauffage_boulangerie_nuit, valeur: 16.0}
+            - {entite: input_number.chauffage_cuisine_confort, valeur: 19.0}
+            - {entite: input_number.chauffage_cuisine_nuit, valeur: 16.5}
+            - {entite: input_number.chauffage_salon_confort, valeur: 20.5}
+            - {entite: input_number.chauffage_salon_nuit, valeur: 17.5}
+            - {entite: input_number.chaudiere_consigne_marche, valeur: 24}
+            - {entite: input_number.chaudiere_consigne_arret, valeur: 10}
+            - {entite: input_number.duree_confort, valeur: 120}
+            - {entite: input_number.clim_seuil_humidite, valeur: 65}
+            - {entite: input_number.clim_deshu_delta, valeur: 1.5}
+            - {entite: input_number.clim_deshu_temp_max, valeur: 22}
+            - {entite: input_number.clim_temp_min, valeur: 15}
+            - {entite: input_number.clim_duree_manuel, valeur: 180}
+            - {entite: input_number.clim_seuil_froid, valeur: 26}
+            - {entite: input_number.clim_consigne_ete, valeur: 25}
+            - {entite: input_number.clim_seuil_pac, valeur: 5}
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: "{{ repeat.item.entite }}"
+              data:
+                value: "{{ repeat.item.valeur }}"
+      # Comportements voulus par défaut : Lolo à la maison, et la clim de sa
+      # chambre qui limite l'humidité et maintient une température minimale.
+      - service: input_boolean.turn_on
+        target:
+          entity_id:
+            - input_boolean.presence_laurent
+            - input_boolean.clim_auto_deshu
+            - input_boolean.clim_maintien_temp_min
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.chauffage_reglages_initialises
