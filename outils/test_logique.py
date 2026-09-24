@@ -422,6 +422,34 @@ verifier("Léo présent : sa chambre chauffe", m.consignes['chambre_leo'], 19.5)
 verifier("Pablo absent : sa chambre à 15°", m.consignes['chambre_pablo'], 15.0)
 verifier("SdB commune : chauffée par le seul Léo", m.consignes['sdb_enfants'], 21.0)
 
+m = evaluer(Monde(presents=['pablo', 'laurent'], semaine=41))
+verifier("Pablo présent : sa chambre chauffe", m.consignes['chambre_pablo'], 19.5)
+verifier("Léo absent : sa chambre à 15°", m.consignes['chambre_leo'], 15.0)
+verifier("SdB commune : chauffée par le seul Pablo", m.consignes['sdb_enfants'], 21.0)
+
+m = evaluer(Monde(presents=['laurent'], semaine=41))
+verifier("aucun enfant : les trois pièces à l'absence",
+         [m.consignes[p] for p in ('chambre_leo', 'chambre_pablo', 'sdb_enfants')],
+         [15.0, 15.0, 15.0])
+
+titre("Bascule de semaine : les boutons tiennent jusqu'au lundi")
+bascule = next(a for a in chauffage['automation'] if a['id'] == 'chauffage_bascule_garde')
+verifier("pas de déclenchement au redémarrage",
+         any(d.get('platform') == 'homeassistant' for d in bascule['trigger']), False)
+garde = bascule['condition'][0]['value_template']
+
+
+def bascule_autorisee(declencheur, jour):
+    lundi = datetime.datetime.fromisocalendar(2026, 41, 1)
+    return rendre_brut(garde, {'trigger': {'id': declencheur},
+                               'now': lambda: lundi + datetime.timedelta(days=jour)})
+
+
+verifier("00h05 un lundi : bascule", bascule_autorisee('nuit', 0), 'True')
+verifier("00h05 un mercredi : bouton manuel préservé", bascule_autorisee('nuit', 2), 'False')
+verifier("sélecteur de garde changé un mercredi : bascule",
+         bascule_autorisee('selecteur', 2), 'True')
+
 titre("Bouton confort")
 m = evaluer(Monde(presents=['laurent'], horaire=False, semaine=40,
                   boosts=['chambre_pablo']))

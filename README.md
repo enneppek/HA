@@ -225,7 +225,7 @@ la salle de bains enfants repassent en confort.
 | Paire | Absents | 15 °C |
 | Impaire | Présents | Suivent l'horaire |
 
-La bascule est automatique chaque nuit à 00h05. Les vacances scolaires ne
+La bascule est automatique le lundi à 00h05, et seulement ce jour-là : un bouton Léo ou Pablo actionné à la main en cours de semaine tient jusqu'au lundi suivant. Les vacances scolaires ne
 suivent pas la parité : `input_select.garde_enfants` permet de forcer
 **Présents** ou **Absents** sans toucher au YAML.
 
