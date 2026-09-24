@@ -821,7 +821,6 @@ automation:
           - input_boolean.confort_sdb_enfants
           - input_boolean.confort_chambre_laurent
           - input_boolean.confort_boulangerie
-          - input_boolean.confort_boulangerie
           - input_boolean.confort_cuisine
           - input_boolean.confort_salon
           - input_number.chauffage_absence
@@ -953,26 +952,37 @@ automation:
   # Un appui confort s'éteint tout seul, pour ne pas chauffer une pièce vide
   # jusqu'au lendemain.
   ##############################################################################
+  #
+  # Pas de `delay` : un redémarrage de Home Assistant l'annulerait, alors que
+  # l'interrupteur, lui, retrouve son état. Le confort resterait allumé pour
+  # toujours. On vérifie plutôt, toutes les 5 minutes, depuis combien de
+  # temps chaque bouton est allumé.
   - id: chauffage_extinction_confort
     alias: "Chauffage - extinction automatique du confort"
-    mode: parallel
-    max: 10
+    mode: single
     trigger:
-      - platform: state
-        entity_id:
-          - input_boolean.confort_chambre_leo
-          - input_boolean.confort_chambre_pablo
-          - input_boolean.confort_sdb_enfants
-          - input_boolean.confort_chambre_laurent
-          - input_boolean.confort_cuisine
-          - input_boolean.confort_salon
-        to: "on"
+      - platform: time_pattern
+        minutes: "/5"
+      - platform: homeassistant
+        event: start
+    variables:
+      a_eteindre: >-
+        {% set duree = states('input_number.duree_confort') | int(default=120) * 60 %}
+        {% set ns = namespace(l=[]) %}
+        {% for e in ['input_boolean.confort_chambre_leo', 'input_boolean.confort_chambre_pablo', 'input_boolean.confort_sdb_enfants', 'input_boolean.confort_chambre_laurent', 'input_boolean.confort_boulangerie', 'input_boolean.confort_cuisine', 'input_boolean.confort_salon'] %}
+          {% if is_state(e, 'on')
+                and (now() - states[e].last_changed).total_seconds() >= duree %}
+            {% set ns.l = ns.l + [e] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.l }}
+    condition:
+      - condition: template
+        value_template: "{{ a_eteindre | count > 0 }}"
     action:
-      - delay:
-          minutes: "{{ states('input_number.duree_confort') | int(default=120) }}"
       - service: input_boolean.turn_off
         target:
-          entity_id: "{{ trigger.entity_id }}"
+          entity_id: "{{ a_eteindre }}"
 
   ##############################################################################
   # Chaudière mazout via le Lyric T6, détourné en relais marche/arrêt.

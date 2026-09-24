@@ -348,6 +348,61 @@ roles = {k for k in cles_state_image(carte)} - {'on', 'off'}
 verifier("chaque rôle possible a son image",
          {'Chauffage', 'Assèchement', 'Froid', 'Arrêt', 'Manuel'} <= roles, True)
 
+titre("Automatisations : listes cohérentes, rien de perdu au redémarrage")
+toutes = chauffage['automation'] + clim_pkg['automation']
+
+
+def delais(noeud):
+    if isinstance(noeud, dict):
+        if 'delay' in noeud:
+            yield noeud['delay']
+        for valeur in noeud.values():
+            yield from delais(valeur)
+    elif isinstance(noeud, list):
+        for valeur in noeud:
+            yield from delais(valeur)
+
+
+# Un `delay` est annulé par un redémarrage : seuls de courts délais de
+# synchronisation sont admis, jamais une minuterie de plusieurs minutes.
+longs = [(a['id'], d) for a in toutes for d in delais(a.get('action', []))
+         if d != "00:00:05"]
+verifier("aucune minuterie longue perdue au redémarrage", longs, [])
+
+conforts = sorted(f"input_boolean.{c}" for c in chauffage['input_boolean']
+                  if c.startswith('confort_'))
+application = next(a for a in chauffage['automation'] if a['id'] == 'chauffage_application_consignes')
+ids = [e for d in application['trigger'] for e in (d.get('entity_id') or [])
+       if isinstance(d.get('entity_id'), list)]
+verifier("aucun déclencheur en double", sorted(e for e in set(ids) if ids.count(e) > 1), [])
+verifier("chaque bouton confort déclenche l'application",
+         [c for c in conforts if c not in ids], [])
+extinction = next(a for a in chauffage['automation'] if a['id'] == 'chauffage_extinction_confort')
+verifier("chaque bouton confort s'éteint seul",
+         [c for c in conforts if c not in extinction['variables']['a_eteindre']], [])
+
+
+def a_eteindre(allumes_depuis):
+    """allumes_depuis : {bouton: minutes écoulées depuis l'allumage}"""
+    maintenant = datetime.datetime(2026, 10, 7, 12, 0)
+
+    class Etat:
+        def __init__(self, minutes):
+            self.last_changed = maintenant - datetime.timedelta(minutes=minutes)
+
+    etats = {f"input_boolean.confort_{b}": Etat(m) for b, m in allumes_depuis.items()}
+    return rendre_brut(extinction['variables']['a_eteindre'], {
+        'states': type('S', (), {
+            '__getitem__': lambda s, e: etats[e],
+            '__call__': lambda s, e: '120' if e == 'input_number.duree_confort' else 'off'})(),
+        'is_state': lambda e, v: v == 'on' and e in etats,
+        'now': lambda: maintenant})
+
+
+verifier("confort allumé depuis 3 h : éteint",
+         a_eteindre({'salon': 180}), "['input_boolean.confort_salon']")
+verifier("confort allumé depuis 1 h : conservé", a_eteindre({'salon': 60}), "[]")
+
 titre("Cohérence du bloc `pieces`")
 verifier("sept pièces déclarées", len(PIECES), 7)
 verifier("huit vannes au total",

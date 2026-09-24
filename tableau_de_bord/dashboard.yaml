@@ -70,14 +70,16 @@ views:
               {% set t = state_attr('sensor.chauffage_temperatures', 'temperatures') or {} %}
               {% set o = state_attr('sensor.chauffage_temperatures', 'origine') or {} %}
               {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+              {% set r = state_attr('sensor.chauffage_relais', 'relais') or {} %}
               | Pièce | Mesure | Consigne | Horaire |
               |:--|--:|--:|:--|
               {%- for p, cible in c.items() %}
               {%- set hp = h.get(p, 'schedule.chauffage') %}
-              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | **{{ cible }} °C** | {{ '🟢' if is_state(hp, 'on') else '⚪' }} {{ 'propre' if hp == 'schedule.chauffage_' ~ p else 'commun' }} |
+              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | {{ 'clim' if r.get(p) == 'clim' else '**' ~ cible ~ ' °C**' }} | {{ '—' if r.get(p) == 'clim' else ('🟢' if is_state(hp, 'on') else '⚪') ~ (' ✎' if hp == 'schedule.chauffage_' ~ p else '') }} |
               {%- endfor %}
 
-              \* mesurée par les vannes, faute de sonde · 🟢 dans l'horaire (confort) · ⚪ hors horaire (nuit)
+              🟢 dans l'horaire (confort) · ⚪ hors horaire (nuit) · ✎ horaire propre à la pièce ·
+              \* mesurée par les vannes, faute de sonde
 
       # --- Qui est à la maison ----------------------------------------------
       - type: grid
@@ -202,6 +204,7 @@ views:
                 color: "#f94144"
             grid_options:
               columns: 6
+              rows: 3
           - type: tile
             entity: input_boolean.confort_chambre_leo
             name: Confort immédiat
@@ -212,7 +215,7 @@ views:
               action: toggle
             grid_options:
               columns: 6
-              rows: 2
+              rows: 3
           - type: tile
             entity: input_number.chauffage_chambre_leo_confort
             name: Confort
@@ -266,6 +269,7 @@ views:
                 color: "#f94144"
             grid_options:
               columns: 6
+              rows: 3
           - type: tile
             entity: input_boolean.confort_chambre_pablo
             name: Confort immédiat
@@ -276,7 +280,7 @@ views:
               action: toggle
             grid_options:
               columns: 6
-              rows: 2
+              rows: 3
           - type: tile
             entity: input_number.chauffage_chambre_pablo_confort
             name: Confort
@@ -330,6 +334,7 @@ views:
                 color: "#f94144"
             grid_options:
               columns: 6
+              rows: 3
           - type: tile
             entity: input_boolean.confort_sdb_enfants
             name: Confort immédiat
@@ -340,7 +345,7 @@ views:
               action: toggle
             grid_options:
               columns: 6
-              rows: 2
+              rows: 3
           - type: tile
             entity: input_number.chauffage_sdb_enfants_confort
             name: Confort
@@ -394,6 +399,7 @@ views:
                 color: "#f94144"
             grid_options:
               columns: 6
+              rows: 3
           - type: tile
             entity: input_boolean.confort_boulangerie
             name: Confort immédiat
@@ -404,7 +410,7 @@ views:
               action: toggle
             grid_options:
               columns: 6
-              rows: 2
+              rows: 3
           - type: tile
             entity: input_number.chauffage_boulangerie_confort
             name: Confort
@@ -458,6 +464,7 @@ views:
                 color: "#f94144"
             grid_options:
               columns: 6
+              rows: 3
           - type: tile
             entity: input_boolean.confort_cuisine
             name: Confort immédiat
@@ -468,7 +475,7 @@ views:
               action: toggle
             grid_options:
               columns: 6
-              rows: 2
+              rows: 3
           - type: tile
             entity: input_number.chauffage_cuisine_confort
             name: Confort
@@ -522,6 +529,7 @@ views:
                 color: "#f94144"
             grid_options:
               columns: 6
+              rows: 3
           - type: tile
             entity: input_boolean.confort_salon
             name: Confort immédiat
@@ -532,7 +540,7 @@ views:
               action: toggle
             grid_options:
               columns: 6
-              rows: 2
+              rows: 3
           - type: tile
             entity: input_number.chauffage_salon_confort
             name: Confort

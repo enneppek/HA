@@ -306,16 +306,28 @@ automation:
         target:
           entity_id: input_boolean.clim_pilotage_manuel
 
+  # Pas de `delay` : un redémarrage de Home Assistant l'annulerait, alors que
+  # l'interrupteur retrouve son état « activé ». La clim resterait alors en
+  # pilotage manuel pour toujours, et l'automatisation muette. On vérifie
+  # plutôt, toutes les 5 minutes, depuis combien de temps il est activé.
   - id: clim_fin_pilotage_manuel
     alias: "Clim - rendre la main à l'automatisation"
-    mode: restart
+    mode: single
     trigger:
-      - platform: state
+      - platform: time_pattern
+        minutes: "/5"
+      - platform: homeassistant
+        event: start
+    condition:
+      - condition: state
         entity_id: input_boolean.clim_pilotage_manuel
-        to: "on"
+        state: "on"
+      - condition: template
+        value_template: >-
+          {{ (now() - states.input_boolean.clim_pilotage_manuel.last_changed)
+             .total_seconds()
+             >= states('input_number.clim_duree_manuel') | int(default=180) * 60 }}
     action:
-      - delay:
-          minutes: "{{ states('input_number.clim_duree_manuel') | int(default=180) }}"
       - service: input_boolean.turn_off
         target:
           entity_id: input_boolean.clim_pilotage_manuel
