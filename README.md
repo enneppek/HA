@@ -289,10 +289,16 @@ nom exact.
 | Chambre Léo | `Chauffage chambre leo` |
 | Chambre Pablo | `Chauffage chambre pablo` |
 | Salle de bains enfants | `Chauffage sdb enfants` |
-| Chambre Lolo | `Chauffage chambre laurent` |
 | Boulangerie | `Chauffage boulangerie` |
 | Cuisine | `Chauffage cuisine` |
 | Salon | `Chauffage salon` |
+
+Le tableau de bord affiche toutes les grilles en usage, jour par jour : une
+barre de 24 cases (une par heure, pleine pendant le confort), les plages en
+clair, et les pièces qui suivent chaque horaire. Une planification
+n'exposant que son prochain changement, `sensor.chauffage_horaires` en lit le
+contenu chaque minute par l'action `schedule.get_schedule` : une
+modification faite dans l'interface apparaît en moins d'une minute.
 
 Une planification créée est prise en compte d'elle-même, sans redémarrage :
 la vue d'ensemble indique « propre » en face de la pièce. Une fois créée, son

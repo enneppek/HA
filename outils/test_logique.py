@@ -41,6 +41,7 @@ TPL_DEMANDE = capteur(chauffage, 'Chauffage demande chaudière')['state']
 TPL_CHAUDIERE = capteur(chauffage, 'Chauffage consigne chaudière')['state']
 TPL_ORDRES = capteur(clim_pkg, 'Clim pilotage')['attributes']['ordres']
 TPL_ROLE = capteur(clim_pkg, 'Clim rôle')['state']
+TPL_GRILLES = capteur(chauffage, 'Chauffage horaires')['attributes']['grilles']
 
 
 def rendre_brut(tpl, globals_=None):
@@ -90,7 +91,8 @@ class Monde:
                  humidites=None, semaine=41, exterieur=12.0,
                  clim_froid=False, clim_chaud=False, assechement=False,
                  temp_min=True, manuel=False, clim_etat='off',
-                 sondes_indispo=(), reglages=None, horaires=None, depuis=None):
+                 sondes_indispo=(), reglages=None, horaires=None, depuis=None,
+                 grilles=None):
         # Valeurs par défaut conformes à l'installation : maintien d'une
         # température minimale, assèchement seulement sur demande, froid et
         # appoint chauffage désactivés.
@@ -105,6 +107,8 @@ class Monde:
         self.assechement = assechement
         # {entité: minutes écoulées depuis son dernier changement d'état}
         self.depuis = depuis or {}
+        # Contenu des planifications, tel que le range sensor.chauffage_horaires.
+        self.grilles = grilles
         self.temp_min, self.manuel, self.clim_etat = temp_min, manuel, clim_etat
         self.sondes_indispo = set(sondes_indispo)
         self.reglages = {**self.REGLAGES, **(reglages or {})}
@@ -175,6 +179,7 @@ class Monde:
             ('sensor.chauffage_consignes', 'horaires'): getattr(self, 'horaires_utilises', None),
             ('sensor.chauffage_relais', 'relais'): self.relais,
             ('sensor.clim_pilotage', 'ordres'): self.ordres,
+            ('sensor.chauffage_horaires', 'grilles'): self.grilles,
         }.get((eid, attr))
 
     def now(self):
@@ -296,7 +301,11 @@ def contenus_markdown(noeud):
 
 for scenario in ('maison pleine', 'maison vide'):
     presents = ['leo', 'pablo', 'laurent'] if scenario == 'maison pleine' else []
-    m_carte = Monde(presents=presents, clim_etat='heat')
+    m_carte = Monde(presents=presents, clim_etat='heat', horaires={
+        'schedule.chauffage_commun': 'on', 'schedule.chauffage_salon': 'off'}, grilles={
+        'schedule.chauffage_commun': {'monday': [{'de': '06:00', 'a': '08:30'}]},
+        'schedule.chauffage_salon': {'monday': [{'de': '18:00', 'a': '24:00'}]},
+        'schedule.chauffage': {'monday': [{'de': '06:00', 'a': '22:00'}]}})
     ok = True
     try:
         m_carte.temperatures = eval(rendre(TPL_TEMPS, m_carte))
@@ -483,6 +492,26 @@ m = evaluer(Monde(presents=['leo'], sondes_indispo=['chambre_leo'],
 verifier("sonde de Léo pas encore revenue : repli sur sa vanne",
          m.origine['chambre_leo'], 'vannes')
 verifier("  -> la chambre reste pilotable", m.temperatures['chambre_leo'], 17.0)
+
+titre("Lecture du contenu des horaires")
+# schedule.get_schedule renvoie des heures (objets time) ; une plage finissant
+# à minuit vaut time.max. On accepte aussi des textes, par prudence.
+reponse = {
+    'schedule.chauffage_commun': {
+        'monday': [{'from': datetime.time(6, 0), 'to': datetime.time(8, 30)},
+                   {'from': datetime.time(16, 30), 'to': datetime.time(22, 0)}],
+        'saturday': [{'from': datetime.time(8, 0), 'to': datetime.time.max}],
+        'sunday': [{'from': '08:00:00', 'to': '22:00:00'}],
+    },
+}
+grilles = eval(rendre_brut(TPL_GRILLES, {'reponse': reponse}))
+commun = grilles['schedule.chauffage_commun']
+verifier("plages converties en texte HH:MM",
+         commun['monday'], [{'de': '06:00', 'a': '08:30'}, {'de': '16:30', 'a': '22:00'}])
+verifier("fin à minuit affichée 24:00", commun['saturday'], [{'de': '08:00', 'a': '24:00'}])
+verifier("heures déjà en texte : acceptées", commun['sunday'], [{'de': '08:00', 'a': '22:00'}])
+verifier("jour sans plage : liste vide", commun['tuesday'], [])
+verifier("aucune réponse : aucun horaire", eval(rendre_brut(TPL_GRILLES, {'reponse': None})), {})
 
 titre("Parité des semaines")
 m = evaluer(Monde(presents=['laurent'], semaine=40))

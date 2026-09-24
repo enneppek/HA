@@ -144,21 +144,71 @@ views:
             color: green
             grid_options:
               columns: full
+          # Toutes les grilles, jour par jour. La barre couvre 0 h à 24 h, une
+          # case par heure : pleine si l'heure est dans une plage (confort).
           - type: markdown
             grid_options:
               columns: full
             content: |
-              Clique sur l'horaire commun, puis sur ⚙️, pour le dessiner jour par jour.
-              Une pièce peut avoir **ses propres heures** : crée une planification
-              portant exactement le nom ci-dessous, elle sera suivie d'elle-même.
+              {% set g = state_attr('sensor.chauffage_horaires', 'grilles') or {} %}
+              {% set suivis = state_attr('sensor.chauffage_consignes', 'horaires') or {} %}
+              {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+              {% set rel = state_attr('sensor.chauffage_relais', 'relais') or {} %}
+              {% set jours = [['monday', 'Lun'], ['tuesday', 'Mar'], ['wednesday', 'Mer'],
+                              ['thursday', 'Jeu'], ['friday', 'Ven'], ['saturday', 'Sam'],
+                              ['sunday', 'Dim']] %}
+              {% set propres = g.keys() | reject('eq', 'schedule.chauffage_commun')
+                               | reject('eq', 'schedule.chauffage') | sort | list %}
+              {% set ordre = ['schedule.chauffage_commun'] + propres + ['schedule.chauffage'] %}
+              {%- for e in ordre if e in g %}
+              {%- set np = namespace(l=[]) %}
+              {%- for p, h in suivis.items() if h == e and rel.get(p) != 'clim' %}
+              {%- set np.l = np.l + [cfg.get(p, {}).get('nom', p)] %}
+              {%- endfor %}
+              {%- if np.l %}
+              {%- set titre = 'Horaire commun' if e == 'schedule.chauffage_commun'
+                    else ('Horaire de secours' if e == 'schedule.chauffage' else 'Horaire propre') %}
+
+              **{{ titre }}** : {{ np.l | join(', ') }}
+
+              | | 0 h · · · 12 h · · · 24 h | Plages |
+              |:--|:--|:--|
+              {%- for j, court in jours %}
+              {%- set plages = g[e].get(j, []) %}
+              {%- set nb = namespace(s='', t=[]) %}
+              {%- for h in range(24) %}
+              {%- set milieu = h * 60 + 30 %}
+              {%- set dedans = namespace(v=false) %}
+              {%- for p in plages %}
+              {%- set debut = (p.de[:2] | int) * 60 + (p.de[3:5] | int) %}
+              {%- set fin = (p.a[:2] | int) * 60 + (p.a[3:5] | int) %}
+              {%- if debut <= milieu and milieu < fin %}{% set dedans.v = true %}{% endif %}
+              {%- endfor %}
+              {%- set nb.s = nb.s ~ ('█' if dedans.v else '░') %}
+              {%- endfor %}
+              {%- for p in plages %}{% set nb.t = nb.t + [p.de ~ '–' ~ p.a] %}{% endfor %}
+              | {{ court }} | `{{ nb.s }}` | {{ nb.t | join(' · ') if nb.t else 'aucune' }} |
+              {%- endfor %}
+              {%- endif %}
+              {%- endfor %}
+              {%- if not g %}
+              *Lecture des horaires en cours…*
+              {%- endif %}
+
+          # Noms à saisir pour créer un horaire propre à une pièce.
+          - type: markdown
+            grid_options:
+              columns: full
+            content: |
+              Clique sur l'horaire commun, puis sur ⚙️, pour le modifier.
+              Pour qu'une pièce ait **ses propres heures**, crée une planification
+              portant exactement l'un de ces noms :
 
               | Pièce | Nom à saisir |
               |:--|:--|
-              | Toute la maison | `Chauffage commun` |
               | Chambre Léo | `Chauffage chambre leo` |
               | Chambre Pablo | `Chauffage chambre pablo` |
               | Salle de bains enfants | `Chauffage sdb enfants` |
-              | Chambre Lolo | `Chauffage chambre laurent` |
               | Boulangerie | `Chauffage boulangerie` |
               | Cuisine | `Chauffage cuisine` |
               | Salon | `Chauffage salon` |

@@ -120,6 +120,9 @@ leurs deux chambres et la salle de bains restent à la température d'absence
   sinon `schedule.chauffage_commun`, sinon `schedule.chauffage` (YAML, secours).
   L'attribut `horaires` de `sensor.chauffage_consignes` indique lequel chaque
   pièce suit.
+- Contenu des horaires : `sensor.chauffage_horaires` (attribut `grilles`),
+  rempli chaque minute par `schedule.get_schedule` ; une planification
+  n'expose sinon que son `next_event`.
 
 ## En suspens
 

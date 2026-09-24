@@ -571,6 +571,57 @@ template:
           {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
              .get('salon') }}
 
+  ##############################################################################
+  # 8 bis. LE CONTENU DES HORAIRES, pour l'afficher
+  #
+  # Une planification n'expose que son prochain changement (`next_event`), pas
+  # sa grille de la semaine. On la demande donc par l'action
+  # schedule.get_schedule, chaque minute, pour toutes les planifications du
+  # chauffage ; une modification faite dans l'interface apparaît ainsi sur le
+  # tableau de bord en moins d'une minute.
+  #
+  # La réponse donne, par jour, des plages `from` / `to` sous forme d'heures ;
+  # on les ramène à du texte « HH:MM ». Une plage finissant à minuit est
+  # stockée comme 23:59:59.999999 : on l'affiche « 24:00 ».
+  ##############################################################################
+  - trigger:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: homeassistant
+        event: start
+    action:
+      - variables:
+          cibles: >-
+            {{ states.schedule | map(attribute='entity_id')
+               | select('match', 'schedule.chauffage') | list }}
+      - service: schedule.get_schedule
+        target:
+          entity_id: "{{ cibles }}"
+        response_variable: reponse
+    sensor:
+      - name: "Chauffage horaires"
+        unique_id: chauffage_horaires
+        icon: mdi:calendar-week
+        state: "{{ (reponse or {}) | count }}"
+        attributes:
+          grilles: >-
+            {% set g = namespace(d={}) %}
+            {% for e, jours in (reponse or {}).items() %}
+              {% set nj = namespace(d={}) %}
+              {% for j in ['monday', 'tuesday', 'wednesday', 'thursday',
+                           'friday', 'saturday', 'sunday'] %}
+                {% set nl = namespace(l=[]) %}
+                {% for r in jours.get(j, []) %}
+                  {% set fin = r['to'] | string %}
+                  {% set nl.l = nl.l + [{'de': (r['from'] | string)[:5],
+                                         'a': '24:00' if '.999' in fin else fin[:5]}] %}
+                {% endfor %}
+                {% set nj.d = dict(nj.d.items() | list + [(j, nl.l)]) %}
+              {% endfor %}
+              {% set g.d = dict(g.d.items() | list + [(e, nj.d)]) %}
+            {% endfor %}
+            {{ g.d }}
+
 ################################################################################
 # 9. HORAIRE — semaines impaires et présence
 # Modifiable ensuite dans l'interface : Paramètres > Appareils et services >
