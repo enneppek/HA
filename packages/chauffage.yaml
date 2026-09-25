@@ -569,6 +569,16 @@ template:
              if is_state('binary_sensor.chauffage_demande_chaudiere', 'on')
              else states('input_number.chaudiere_consigne_arret') | float(default=10) }}
 
+      # L'état de la chaudière en clair, pour l'illustration du tableau de
+      # bord : un binary_sensor de classe « heat » s'affiche « Chaud » ou
+      # « Normal », peu parlant.
+      - name: "Chauffage état chaudière"
+        unique_id: chauffage_etat_chaudiere
+        icon: mdi:fire
+        state: >-
+          {{ 'en marche' if is_state('binary_sensor.chauffage_demande_chaudiere', 'on')
+             else 'au repos' }}
+
   ##############################################################################
   # 8. UN CAPTEUR PAR PIÈCE, pour le tableau de bord
   #

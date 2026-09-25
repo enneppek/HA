@@ -47,18 +47,47 @@ views:
           - type: heading
             heading: La maison
             icon: mdi:home-thermometer
-          - type: picture-entity
+          # L'illustration animée en fond, et des valeurs en direct par-dessus.
+          # Les positions sont en % de l'image (800 × 300) : la température
+          # extérieure dans le ciel, en face de la lune ; l'état de la
+          # chaudière en bas. Libellés alignés par la gauche (HA les centre
+          # par défaut, et un texte large débordait alors de la carte). La
+          # police suit la largeur de l'écran, bornée pour rester lisible.
+          - type: picture-elements
             entity: binary_sensor.chauffage_demande_chaudiere
-            name: Chaudière
-            show_name: true
-            show_state: true
-            aspect_ratio: 37.5%
             image: /local/chauffage/maison_repos.svg?v=1
             state_image:
               "on": /local/chauffage/maison_chauffe.svg?v=1
               "off": /local/chauffage/maison_repos.svg?v=1
-            tap_action:
-              action: more-info
+            elements:
+              - type: state-label
+                entity: sensor.chauffage_temperature_exterieure
+                prefix: "Dehors  "
+                tap_action:
+                  action: more-info
+                style:
+                  top: 17%
+                  left: 5%
+                  transform: translate(0, -50%)
+                  color: white
+                  font-size: clamp(14px, 1.7vw, 24px)
+                  font-weight: 600
+                  white-space: nowrap
+                  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7)
+              - type: state-label
+                entity: sensor.chauffage_etat_chaudiere
+                prefix: "Chaudière "
+                tap_action:
+                  action: more-info
+                style:
+                  top: 91%
+                  left: 5%
+                  transform: translate(0, -50%)
+                  color: white
+                  font-size: clamp(11px, 1.2vw, 16px)
+                  font-weight: 500
+                  white-space: nowrap
+                  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8)
             grid_options:
               columns: full
           - type: markdown
