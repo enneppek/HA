@@ -105,12 +105,12 @@ views:
               |:--|--:|--:|:--|
               {%- for p, cible in c.items() %}
               {%- set hp = h.get(p, 'schedule.chauffage') %}
-              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | {{ 'clim' if r.get(p) == 'clim' else '**' ~ cible ~ ' °C**' ~ (' ✋' if p in dg else '') ~ (' ⏸' if is_state('input_boolean.chauffage_' ~ p ~ '_actif', 'off') else '') }} | {{ '—' if r.get(p) == 'clim' else ('🟢' if is_state(hp, 'on') else '⚪') ~ (' ✎' if hp == 'schedule.chauffage_' ~ p else '') }} |
+              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | {{ 'clim' if r.get(p) == 'clim' else '**' ~ cible ~ ' °C**' ~ (' ✋' if p in dg else '') ~ (' ⏸' if is_state('input_boolean.chauffage_' ~ p ~ '_arret', 'on') else '') }} | {{ '—' if r.get(p) == 'clim' else ('🟢' if is_state(hp, 'on') else '⚪') ~ (' ✎' if hp == 'schedule.chauffage_' ~ p else '') }} |
               {%- endfor %}
 
               🟢 dans l'horaire · ⚪ hors horaire (nuit) · ✎ horaire propre à la pièce ·
               ✋ réglée sur la vanne, jusqu'au prochain changement de plage ·
-              ⏸ chauffage de la pièce coupé ·
+              ⏸ arrêt forcé (température de nuit) ·
               \* mesurée par les vannes, faute de sonde
 
           - type: tile
@@ -333,13 +333,13 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Décoché : la pièce reste à la température de nuit, commune à
+          # Activé : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_boolean.chauffage_chambre_leo_actif
-            name: Chauffer la pièce
-            icon: mdi:radiator
-            color: deep-orange
+            entity: input_boolean.chauffage_chambre_leo_arret
+            name: Forcer l'arrêt
+            icon: mdi:radiator-off
+            color: blue
             vertical: true
             tap_action:
               action: toggle
@@ -416,13 +416,13 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Décoché : la pièce reste à la température de nuit, commune à
+          # Activé : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_boolean.chauffage_chambre_pablo_actif
-            name: Chauffer la pièce
-            icon: mdi:radiator
-            color: deep-orange
+            entity: input_boolean.chauffage_chambre_pablo_arret
+            name: Forcer l'arrêt
+            icon: mdi:radiator-off
+            color: blue
             vertical: true
             tap_action:
               action: toggle
@@ -499,13 +499,13 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Décoché : la pièce reste à la température de nuit, commune à
+          # Activé : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_boolean.chauffage_sdb_enfants_actif
-            name: Chauffer la pièce
-            icon: mdi:radiator
-            color: deep-orange
+            entity: input_boolean.chauffage_sdb_enfants_arret
+            name: Forcer l'arrêt
+            icon: mdi:radiator-off
+            color: blue
             vertical: true
             tap_action:
               action: toggle
@@ -582,13 +582,13 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Décoché : la pièce reste à la température de nuit, commune à
+          # Activé : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_boolean.chauffage_boulangerie_actif
-            name: Chauffer la pièce
-            icon: mdi:radiator
-            color: deep-orange
+            entity: input_boolean.chauffage_boulangerie_arret
+            name: Forcer l'arrêt
+            icon: mdi:radiator-off
+            color: blue
             vertical: true
             tap_action:
               action: toggle
@@ -665,13 +665,13 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Décoché : la pièce reste à la température de nuit, commune à
+          # Activé : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_boolean.chauffage_cuisine_actif
-            name: Chauffer la pièce
-            icon: mdi:radiator
-            color: deep-orange
+            entity: input_boolean.chauffage_cuisine_arret
+            name: Forcer l'arrêt
+            icon: mdi:radiator-off
+            color: blue
             vertical: true
             tap_action:
               action: toggle
@@ -748,13 +748,13 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Décoché : la pièce reste à la température de nuit, commune à
+          # Activé : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_boolean.chauffage_salon_actif
-            name: Chauffer la pièce
-            icon: mdi:radiator
-            color: deep-orange
+            entity: input_boolean.chauffage_salon_arret
+            name: Forcer l'arrêt
+            icon: mdi:radiator-off
+            color: blue
             vertical: true
             tap_action:
               action: toggle

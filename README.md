@@ -213,8 +213,8 @@ Pour chaque pièce, la consigne est choisie par ordre de priorité décroissant 
 | Priorité | Condition | Consigne |
 |---|---|---|
 | 1 | Confort immédiat demandé | Confort |
-| 2 | « Chauffer la pièce » coché, occupant présent **et** horaire actif | Température de la plage, sinon Confort |
-| 3 | Tout le reste : hors horaire, occupant absent, ou pièce décochée | **Nuit**, commune à toutes les pièces (15 °C) |
+| 2 | Pas d'arrêt forcé, occupant présent **et** horaire actif | Température de la plage, sinon Confort |
+| 3 | Tout le reste : hors horaire, occupant absent, ou arrêt forcé | **Nuit**, commune à toutes les pièces (15 °C) |
 
 Un réglage fait sur une vanne passe devant, jusqu'au prochain changement de
 plage (voir plus bas).
@@ -256,7 +256,7 @@ ha core check && ha core restart
   chambre à la température de nuit ; la salle de bains enfants reste
   chaude tant que Pablo est présent, puisqu'elle a deux occupants.
 - **Une carte par pièce** — cadran de température, confort réglable, bouton
-  **« Chauffer la pièce »** (décoché : la pièce reste à la nuit), et un
+  **« Forcer l'arrêt »** (activé : la pièce reste à la nuit), et un
   bouton qui force le confort immédiatement, puis se coupe seul au bout de
   la durée réglée (2 h par défaut).
 - **Horaires** — voir ci-dessous.
@@ -265,11 +265,13 @@ ha core check && ha core restart
 
 Chaque pièce à radiateur a son confort, `input_number.chauffage_<pièce>_confort`
 (la valeur du bloc `pieces` ne sert que de repli), et son bouton
-**« Chauffer la pièce »**, `input_boolean.chauffage_<pièce>_actif`.
+**« Forcer l'arrêt »**, `input_boolean.chauffage_<pièce>_arret` : activé, la
+pièce reste à la nuit, quel que soit son horaire. Il démarre désactivé,
+si bien qu'une pièce chauffe normalement tant qu'on ne l'arrête pas.
 
 La température de **nuit est unique** pour toutes les pièces à vannes,
 `input_number.chauffage_nuit` (15 °C) : elle s'applique hors horaire, en
-l'absence des occupants, et aux pièces décochées. Elle remplace les anciens
+l'absence des occupants, et aux pièces en arrêt forcé. Elle remplace les anciens
 réglages de nuit par pièce et la température d'absence.
 
 La chambre de Lolo n'a pas ces réglages : sa clim n'y chauffe pas, sauf à
@@ -290,7 +292,7 @@ Pendant cette plage, la pièce vise 24 °C, si l'un de ses occupants est
 présent. Exemple pour la salle de bains enfants : 6 h - 8 h à 24 °C,
 8 h - 19 h à 15 °C, 19 h - 21 h à 22 °C. Une plage sans température prend le
 curseur *Confort* de la pièce ; hors de toute plage, sans occupant, ou si la
-pièce est décochée, c'est la température de *nuit*, commune à toutes. Le « confort immédiat » l'emporte
+pièce est en arrêt forcé, c'est la température de *nuit*, commune à toutes. Le « confort immédiat » l'emporte
 sur une plage plus froide. L'horaire de la clim accepte la même donnée.
 
 HA lit ces données dans les attributs de la planification, qui expose ceux

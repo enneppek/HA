@@ -115,11 +115,12 @@ leurs deux chambres et la salle de bains restent à la température de nuit
 
 - Confort par pièce : `input_number.chauffage_<pièce>_confort`. Nuit
   **unique** pour toutes les pièces à vannes : `input_number.chauffage_nuit`
-  (15 °C), qui vaut aussi pour l'absence et les pièces décochées — choix de
+  (15 °C), qui vaut aussi pour l'absence et les pièces en arrêt forcé — choix de
   Laurent, pas de nuit par pièce.
-- Bouton par pièce `input_boolean.chauffage_<pièce>_actif` : décoché, la
-  pièce reste à la nuit (seul le confort immédiat ou une vanne réglée à la
-  main passent outre).
+- Bouton par pièce « Forcer l'arrêt », `input_boolean.chauffage_<pièce>_arret` :
+  activé, la pièce reste à la nuit (seuls le confort immédiat ou une vanne
+  réglée à la main passent outre). Désactivé par défaut ; le libellé et le
+  sens (activé = arrêt) sont un choix de Laurent.
 - Aucun `initial:` : les valeurs de départ sont posées une fois par version
   par `chauffage_initialiser_reglages` (interrupteurs
   `chauffage_reglages_initialises`, `chauffage_reglages_v2`). Tout nouveau

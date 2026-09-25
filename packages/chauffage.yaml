@@ -175,13 +175,14 @@ template:
   #   1. Bouton confort de la pièce pressé      -> température de confort
   #   2. Un occupant présent + horaire actif    -> température de confort
   #   3. Tout le reste                          -> température de nuit (15°)
-  #      (hors horaire, occupant absent, ou chauffage de la pièce coupé)
+  #      (hors horaire, occupant absent, ou arrêt forcé)
   #
   # Le confort se règle pièce par pièce (input_number.chauffage_<pièce>_confort,
   # repli sur le bloc `pieces`). La nuit est unique pour toutes les pièces
   # à vannes (input_number.chauffage_nuit). Chaque pièce a un bouton
-  # « chauffer » (input_boolean.chauffage_<pièce>_actif) : décoché, elle
-  # reste à la nuit ; seul le confort immédiat passe outre.
+  # « Forcer l'arrêt » (input_boolean.chauffage_<pièce>_arret) : allumé, elle
+  # reste à la nuit ; seuls le confort immédiat et une vanne réglée à la main
+  # passent outre.
   #
   # Consigne par plage : une plage peut porter sa propre température dans ses
   # « données supplémentaires » (`temperature: 24`) ; pendant cette plage,
@@ -225,8 +226,8 @@ template:
             {# Une seule température de nuit pour toutes les pièces à vannes : hors
                horaire, occupant absent, ou pièce dont le chauffage est coupé. #}
             {% set nuit = states('input_number.chauffage_nuit') | float(default=15) %}
-            {# Bouton par pièce. Une pièce sans bouton (chambre de Lolo) est active. #}
-            {% set actif = not is_state('input_boolean.chauffage_' ~ p ~ '_actif', 'off') %}
+            {# Bouton « Forcer l'arrêt » : allumé, la pièce reste à la nuit. #}
+            {% set arret = is_state('input_boolean.chauffage_' ~ p ~ '_arret', 'on') %}
             {% set propre = 'schedule.chauffage_' ~ p %}
             {% set h = propre if states(propre) in ['on', 'off'] else commun %}
             {% set horaire = is_state(h, 'on') %}
@@ -237,7 +238,7 @@ template:
             {% set confort_plage = t_plage | float(default=confort)
                                    if t_plage is not none else confort %}
             {% set base = ([confort, confort_plage] | max) if boost
-                          else (confort_plage if (actif and occupe and horaire) else nuit) %}
+                          else (confort_plage if (not arret and occupe and horaire) else nuit) %}
             {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
                que tant que la consigne de base n'a pas changé depuis. #}
             {% set dg = derogations.get(p) %}
@@ -273,8 +274,8 @@ template:
               {# Une seule température de nuit pour toutes les pièces à vannes : hors
                  horaire, occupant absent, ou pièce dont le chauffage est coupé. #}
               {% set nuit = states('input_number.chauffage_nuit') | float(default=15) %}
-              {# Bouton par pièce. Une pièce sans bouton (chambre de Lolo) est active. #}
-              {% set actif = not is_state('input_boolean.chauffage_' ~ p ~ '_actif', 'off') %}
+              {# Bouton « Forcer l'arrêt » : allumé, la pièce reste à la nuit. #}
+              {% set arret = is_state('input_boolean.chauffage_' ~ p ~ '_arret', 'on') %}
               {% set propre = 'schedule.chauffage_' ~ p %}
               {% set h = propre if states(propre) in ['on', 'off'] else commun %}
               {% set horaire = is_state(h, 'on') %}
@@ -285,7 +286,7 @@ template:
               {% set confort_plage = t_plage | float(default=confort)
                                      if t_plage is not none else confort %}
               {% set base = ([confort, confort_plage] | max) if boost
-                            else (confort_plage if (actif and occupe and horaire) else nuit) %}
+                            else (confort_plage if (not arret and occupe and horaire) else nuit) %}
               {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
                  que tant que la consigne de base n'a pas changé depuis. #}
               {% set dg = derogations.get(p) %}
@@ -320,8 +321,8 @@ template:
               {# Une seule température de nuit pour toutes les pièces à vannes : hors
                  horaire, occupant absent, ou pièce dont le chauffage est coupé. #}
               {% set nuit = states('input_number.chauffage_nuit') | float(default=15) %}
-              {# Bouton par pièce. Une pièce sans bouton (chambre de Lolo) est active. #}
-              {% set actif = not is_state('input_boolean.chauffage_' ~ p ~ '_actif', 'off') %}
+              {# Bouton « Forcer l'arrêt » : allumé, la pièce reste à la nuit. #}
+              {% set arret = is_state('input_boolean.chauffage_' ~ p ~ '_arret', 'on') %}
               {% set propre = 'schedule.chauffage_' ~ p %}
               {% set h = propre if states(propre) in ['on', 'off'] else commun %}
               {% set horaire = is_state(h, 'on') %}
@@ -332,7 +333,7 @@ template:
               {% set confort_plage = t_plage | float(default=confort)
                                      if t_plage is not none else confort %}
               {% set base = ([confort, confort_plage] | max) if boost
-                            else (confort_plage if (actif and occupe and horaire) else nuit) %}
+                            else (confort_plage if (not arret and occupe and horaire) else nuit) %}
               {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
                  que tant que la consigne de base n'a pas changé depuis. #}
               {% set dg = derogations.get(p) %}
@@ -367,8 +368,8 @@ template:
               {# Une seule température de nuit pour toutes les pièces à vannes : hors
                  horaire, occupant absent, ou pièce dont le chauffage est coupé. #}
               {% set nuit = states('input_number.chauffage_nuit') | float(default=15) %}
-              {# Bouton par pièce. Une pièce sans bouton (chambre de Lolo) est active. #}
-              {% set actif = not is_state('input_boolean.chauffage_' ~ p ~ '_actif', 'off') %}
+              {# Bouton « Forcer l'arrêt » : allumé, la pièce reste à la nuit. #}
+              {% set arret = is_state('input_boolean.chauffage_' ~ p ~ '_arret', 'on') %}
               {% set propre = 'schedule.chauffage_' ~ p %}
               {% set h = propre if states(propre) in ['on', 'off'] else commun %}
               {% set horaire = is_state(h, 'on') %}
@@ -379,7 +380,7 @@ template:
               {% set confort_plage = t_plage | float(default=confort)
                                      if t_plage is not none else confort %}
               {% set base = ([confort, confort_plage] | max) if boost
-                            else (confort_plage if (actif and occupe and horaire) else nuit) %}
+                            else (confort_plage if (not arret and occupe and horaire) else nuit) %}
               {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
                  que tant que la consigne de base n'a pas changé depuis. #}
               {% set dg = derogations.get(p) %}
@@ -414,8 +415,8 @@ template:
               {# Une seule température de nuit pour toutes les pièces à vannes : hors
                  horaire, occupant absent, ou pièce dont le chauffage est coupé. #}
               {% set nuit = states('input_number.chauffage_nuit') | float(default=15) %}
-              {# Bouton par pièce. Une pièce sans bouton (chambre de Lolo) est active. #}
-              {% set actif = not is_state('input_boolean.chauffage_' ~ p ~ '_actif', 'off') %}
+              {# Bouton « Forcer l'arrêt » : allumé, la pièce reste à la nuit. #}
+              {% set arret = is_state('input_boolean.chauffage_' ~ p ~ '_arret', 'on') %}
               {% set propre = 'schedule.chauffage_' ~ p %}
               {% set h = propre if states(propre) in ['on', 'off'] else commun %}
               {% set horaire = is_state(h, 'on') %}
@@ -426,7 +427,7 @@ template:
               {% set confort_plage = t_plage | float(default=confort)
                                      if t_plage is not none else confort %}
               {% set base = ([confort, confort_plage] | max) if boost
-                            else (confort_plage if (actif and occupe and horaire) else nuit) %}
+                            else (confort_plage if (not arret and occupe and horaire) else nuit) %}
               {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
                  que tant que la consigne de base n'a pas changé depuis. #}
               {% set dg = derogations.get(p) %}
@@ -826,29 +827,29 @@ schedule:
 # 10. COMMANDES — présence, confort par pièce, mode de garde
 ################################################################################
 input_boolean:
-  chauffage_chambre_leo_actif:
-    name: "Chauffer - Chambre Léo"
-    icon: mdi:radiator
+  chauffage_chambre_leo_arret:
+    name: "Forcer l'arrêt - Chambre Léo"
+    icon: mdi:radiator-off
 
-  chauffage_chambre_pablo_actif:
-    name: "Chauffer - Chambre Pablo"
-    icon: mdi:radiator
+  chauffage_chambre_pablo_arret:
+    name: "Forcer l'arrêt - Chambre Pablo"
+    icon: mdi:radiator-off
 
-  chauffage_sdb_enfants_actif:
-    name: "Chauffer - Salle de bains enfants"
-    icon: mdi:radiator
+  chauffage_sdb_enfants_arret:
+    name: "Forcer l'arrêt - Salle de bains enfants"
+    icon: mdi:radiator-off
 
-  chauffage_boulangerie_actif:
-    name: "Chauffer - Boulangerie"
-    icon: mdi:radiator
+  chauffage_boulangerie_arret:
+    name: "Forcer l'arrêt - Boulangerie"
+    icon: mdi:radiator-off
 
-  chauffage_cuisine_actif:
-    name: "Chauffer - Cuisine"
-    icon: mdi:radiator
+  chauffage_cuisine_arret:
+    name: "Forcer l'arrêt - Cuisine"
+    icon: mdi:radiator-off
 
-  chauffage_salon_actif:
-    name: "Chauffer - Salon"
-    icon: mdi:radiator
+  chauffage_salon_arret:
+    name: "Forcer l'arrêt - Salon"
+    icon: mdi:radiator-off
 
   chauffage_reglages_v2:
     name: "Chauffage - réglages v2 initialisés"
@@ -1053,17 +1054,17 @@ automation:
           - input_number.chauffage_nuit
           - input_text.chauffage_derogations
           - input_number.chauffage_chambre_leo_confort
-          - input_boolean.chauffage_chambre_leo_actif
+          - input_boolean.chauffage_chambre_leo_arret
           - input_number.chauffage_chambre_pablo_confort
-          - input_boolean.chauffage_chambre_pablo_actif
+          - input_boolean.chauffage_chambre_pablo_arret
           - input_number.chauffage_sdb_enfants_confort
-          - input_boolean.chauffage_sdb_enfants_actif
+          - input_boolean.chauffage_sdb_enfants_arret
           - input_number.chauffage_boulangerie_confort
-          - input_boolean.chauffage_boulangerie_actif
+          - input_boolean.chauffage_boulangerie_arret
           - input_number.chauffage_cuisine_confort
-          - input_boolean.chauffage_cuisine_actif
+          - input_boolean.chauffage_cuisine_arret
           - input_number.chauffage_salon_confort
-          - input_boolean.chauffage_salon_actif
+          - input_boolean.chauffage_salon_arret
           # Horaires : par défaut, commun, puis propres à chaque pièce. Un
           # déclencheur sur une planification pas encore créée ne fait rien.
           - schedule.chauffage
@@ -1371,7 +1372,8 @@ automation:
           - service: input_boolean.turn_on
             target:
               entity_id: input_boolean.chauffage_reglages_initialises
-      # Version 2 : nuit unique et bouton « chauffer » par pièce.
+      # Version 2 : nuit unique. (Les boutons « Forcer l'arrêt » démarrent
+      # désactivés, ce qui est leur bonne valeur : rien à poser.)
       - if:
           - condition: state
             entity_id: input_boolean.chauffage_reglages_v2
@@ -1382,15 +1384,6 @@ automation:
               entity_id: input_number.chauffage_nuit
             data:
               value: 15
-          - service: input_boolean.turn_on
-            target:
-              entity_id:
-                - input_boolean.chauffage_chambre_leo_actif
-                - input_boolean.chauffage_chambre_pablo_actif
-                - input_boolean.chauffage_sdb_enfants_actif
-                - input_boolean.chauffage_boulangerie_actif
-                - input_boolean.chauffage_cuisine_actif
-                - input_boolean.chauffage_salon_actif
           - service: input_boolean.turn_on
             target:
               entity_id: input_boolean.chauffage_reglages_v2
