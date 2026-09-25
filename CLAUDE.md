@@ -122,6 +122,13 @@ leurs deux chambres et la salle de bains restent à la température d'absence
   sinon `schedule.chauffage_commun`, sinon `schedule.chauffage` (YAML, secours).
   L'attribut `horaires` de `sensor.chauffage_consignes` indique lequel chaque
   pièce suit.
+- Température par plage : donnée `temperature` d'une plage de planification
+  (Paramètres avancés > Données supplémentaires), exposée comme attribut
+  pendant la plage. Sans elle : curseur Confort.
+- Réglage manuel d'une vanne = dérogation jusqu'au prochain changement de la
+  consigne de base : `input_text.chauffage_derogations` ({pièce: [réglée,
+  base]}), attributs `consignes_base` et `derogations` de
+  `sensor.chauffage_consignes`, bouton `script.chauffage_annuler_derogations`.
 - Contenu des horaires : `sensor.chauffage_horaires` (attribut `grilles`),
   rempli chaque minute par `schedule.get_schedule` ; une planification
   n'expose sinon que son `next_event`.

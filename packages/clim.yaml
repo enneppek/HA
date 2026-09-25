@@ -160,10 +160,14 @@ template:
               {% set mesure = temps.get(p) | float(default=20) %}
               {% set cible = consignes.get(p, 15) | float(default=15) %}
               {% set horaire = c.horaire_clim and is_state(c.horaire_clim, 'on') %}
+              {# Une plage de l'horaire peut porter sa propre température. #}
+              {% set t_plage = state_attr(c.horaire_clim, 'temperature') if horaire else none %}
+              {% set consigne_plage = t_plage | float(default=consigne_horaire)
+                                      if t_plage is not none else consigne_horaire %}
               {% if assecher %}
                 {% set ordre = {'mode': 'heat', 'temp': 24.0, 'motif': 'assechement'} %}
               {% elif horaire and occupe %}
-                {% set t = [consigne_horaire, temp_min] | max if temp_min_ok else consigne_horaire %}
+                {% set t = [consigne_plage, temp_min] | max if temp_min_ok else consigne_plage %}
                 {% set ordre = {'mode': 'heat', 'temp': t, 'motif': 'horaire'} %}
               {% elif temp_min_ok and (mesure < temp_min
                                        or (en_maintien and mesure < temp_min + 1)) %}

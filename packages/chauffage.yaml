@@ -181,6 +181,16 @@ template:
   # (input_number.chauffage_<pièce>_confort / _nuit) ; les valeurs du bloc
   # `pieces` ne servent que de repli. L'absence est commune à toute la maison.
   #
+  # Consigne par plage : une plage peut porter sa propre température dans ses
+  # « données supplémentaires » (`temperature: 24`) ; pendant cette plage,
+  # c'est la consigne de confort de la pièce.
+  #
+  # Dérogation : une température réglée à la main sur une vanne devient la
+  # consigne de la pièce jusqu'au prochain changement de la consigne de base
+  # (changement de plage, départ ou retour d'un occupant). Mémorisée dans
+  # input_text.chauffage_derogations : {pièce: [réglée, base au moment du
+  # réglage]}.
+  #
   # Horaire : chaque pièce suit sa propre planification si elle existe
   # (schedule.chauffage_<pièce>, créée dans l'interface), sinon l'horaire
   # commun (schedule.chauffage_commun, créé dans l'interface), sinon l'horaire
@@ -202,7 +212,9 @@ template:
           {% set commun = 'schedule.chauffage_commun'
              if states('schedule.chauffage_commun') in ['on', 'off']
              else 'schedule.chauffage' %}
-          {% set nd = namespace(consignes={}, horaires={}) %}
+          {% set brut = states('input_text.chauffage_derogations') %}
+          {% set derogations = brut | from_json if brut.startswith('{') else {} %}
+          {% set nd = namespace(consignes={}, bases={}, horaires={}, derogees=[]) %}
           {% for p, c in cfg.items() %}
             {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
             {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
@@ -215,10 +227,25 @@ template:
             {% set propre = 'schedule.chauffage_' ~ p %}
             {% set h = propre if states(propre) in ['on', 'off'] else commun %}
             {% set horaire = is_state(h, 'on') %}
-            {% set t = confort if (boost or (occupe and horaire))
-                       else (nuit if occupe else absence) %}
+            {# Température propre à la plage en cours, saisie dans ses « données
+               supplémentaires » (temperature: 24). Sans elle : le curseur Confort. #}
+            {% set t_plage = (state_attr(h, 'temperature') if state_attr(h, 'temperature') is not none
+                              else state_attr(h, 'consigne')) if horaire else none %}
+            {% set confort_plage = t_plage | float(default=confort)
+                                   if t_plage is not none else confort %}
+            {% set base = ([confort, confort_plage] | max) if boost
+                          else (confort_plage if (occupe and horaire)
+                                else (nuit if occupe else absence)) %}
+            {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
+               que tant que la consigne de base n'a pas changé depuis. #}
+            {% set dg = derogations.get(p) %}
+            {% set derogee = dg is not none and dg | count == 2
+                             and ((dg[1] | float(default=-99)) - base) | abs < 0.05 %}
+            {% set t = (dg[0] | float(default=base)) if derogee else base %}
             {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+            {% set nd.bases = dict(nd.bases.items() | list + [(p, base | float)]) %}
             {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
+            {% if derogee %}{% set nd.derogees = nd.derogees + [p] %}{% endif %}
           {% endfor %}
           {{ nd.consignes.values() | max if nd.consignes else 0 }}
         attributes:
@@ -233,7 +260,9 @@ template:
             {% set commun = 'schedule.chauffage_commun'
                if states('schedule.chauffage_commun') in ['on', 'off']
                else 'schedule.chauffage' %}
-            {% set nd = namespace(consignes={}, horaires={}) %}
+            {% set brut = states('input_text.chauffage_derogations') %}
+            {% set derogations = brut | from_json if brut.startswith('{') else {} %}
+            {% set nd = namespace(consignes={}, bases={}, horaires={}, derogees=[]) %}
             {% for p, c in cfg.items() %}
               {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
               {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
@@ -246,12 +275,74 @@ template:
               {% set propre = 'schedule.chauffage_' ~ p %}
               {% set h = propre if states(propre) in ['on', 'off'] else commun %}
               {% set horaire = is_state(h, 'on') %}
-              {% set t = confort if (boost or (occupe and horaire))
-                         else (nuit if occupe else absence) %}
+              {# Température propre à la plage en cours, saisie dans ses « données
+                 supplémentaires » (temperature: 24). Sans elle : le curseur Confort. #}
+              {% set t_plage = (state_attr(h, 'temperature') if state_attr(h, 'temperature') is not none
+                                else state_attr(h, 'consigne')) if horaire else none %}
+              {% set confort_plage = t_plage | float(default=confort)
+                                     if t_plage is not none else confort %}
+              {% set base = ([confort, confort_plage] | max) if boost
+                            else (confort_plage if (occupe and horaire)
+                                  else (nuit if occupe else absence)) %}
+              {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
+                 que tant que la consigne de base n'a pas changé depuis. #}
+              {% set dg = derogations.get(p) %}
+              {% set derogee = dg is not none and dg | count == 2
+                               and ((dg[1] | float(default=-99)) - base) | abs < 0.05 %}
+              {% set t = (dg[0] | float(default=base)) if derogee else base %}
               {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+              {% set nd.bases = dict(nd.bases.items() | list + [(p, base | float)]) %}
               {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
+              {% if derogee %}{% set nd.derogees = nd.derogees + [p] %}{% endif %}
             {% endfor %}
             {{ nd.consignes }}
+          consignes_base: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set ns = namespace(presents=[]) %}
+            {% for q in ['leo', 'pablo', 'laurent'] %}
+              {% if is_state('input_boolean.presence_' ~ q, 'on') %}
+                {% set ns.presents = ns.presents + [q] %}
+              {% endif %}
+            {% endfor %}
+            {% set commun = 'schedule.chauffage_commun'
+               if states('schedule.chauffage_commun') in ['on', 'off']
+               else 'schedule.chauffage' %}
+            {% set brut = states('input_text.chauffage_derogations') %}
+            {% set derogations = brut | from_json if brut.startswith('{') else {} %}
+            {% set nd = namespace(consignes={}, bases={}, horaires={}, derogees=[]) %}
+            {% for p, c in cfg.items() %}
+              {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
+              {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
+              {% set confort = states('input_number.chauffage_' ~ p ~ '_confort')
+                               | float(default=c.confort) %}
+              {% set nuit = states('input_number.chauffage_' ~ p ~ '_nuit')
+                            | float(default=c.nuit) %}
+              {% set absence = states('input_number.chauffage_absence')
+                               | float(default=c.absence) %}
+              {% set propre = 'schedule.chauffage_' ~ p %}
+              {% set h = propre if states(propre) in ['on', 'off'] else commun %}
+              {% set horaire = is_state(h, 'on') %}
+              {# Température propre à la plage en cours, saisie dans ses « données
+                 supplémentaires » (temperature: 24). Sans elle : le curseur Confort. #}
+              {% set t_plage = (state_attr(h, 'temperature') if state_attr(h, 'temperature') is not none
+                                else state_attr(h, 'consigne')) if horaire else none %}
+              {% set confort_plage = t_plage | float(default=confort)
+                                     if t_plage is not none else confort %}
+              {% set base = ([confort, confort_plage] | max) if boost
+                            else (confort_plage if (occupe and horaire)
+                                  else (nuit if occupe else absence)) %}
+              {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
+                 que tant que la consigne de base n'a pas changé depuis. #}
+              {% set dg = derogations.get(p) %}
+              {% set derogee = dg is not none and dg | count == 2
+                               and ((dg[1] | float(default=-99)) - base) | abs < 0.05 %}
+              {% set t = (dg[0] | float(default=base)) if derogee else base %}
+              {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+              {% set nd.bases = dict(nd.bases.items() | list + [(p, base | float)]) %}
+              {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
+              {% if derogee %}{% set nd.derogees = nd.derogees + [p] %}{% endif %}
+            {% endfor %}
+            {{ nd.bases }}
           horaires: >-
             {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
             {% set ns = namespace(presents=[]) %}
@@ -263,7 +354,9 @@ template:
             {% set commun = 'schedule.chauffage_commun'
                if states('schedule.chauffage_commun') in ['on', 'off']
                else 'schedule.chauffage' %}
-            {% set nd = namespace(consignes={}, horaires={}) %}
+            {% set brut = states('input_text.chauffage_derogations') %}
+            {% set derogations = brut | from_json if brut.startswith('{') else {} %}
+            {% set nd = namespace(consignes={}, bases={}, horaires={}, derogees=[]) %}
             {% for p, c in cfg.items() %}
               {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
               {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
@@ -276,12 +369,74 @@ template:
               {% set propre = 'schedule.chauffage_' ~ p %}
               {% set h = propre if states(propre) in ['on', 'off'] else commun %}
               {% set horaire = is_state(h, 'on') %}
-              {% set t = confort if (boost or (occupe and horaire))
-                         else (nuit if occupe else absence) %}
+              {# Température propre à la plage en cours, saisie dans ses « données
+                 supplémentaires » (temperature: 24). Sans elle : le curseur Confort. #}
+              {% set t_plage = (state_attr(h, 'temperature') if state_attr(h, 'temperature') is not none
+                                else state_attr(h, 'consigne')) if horaire else none %}
+              {% set confort_plage = t_plage | float(default=confort)
+                                     if t_plage is not none else confort %}
+              {% set base = ([confort, confort_plage] | max) if boost
+                            else (confort_plage if (occupe and horaire)
+                                  else (nuit if occupe else absence)) %}
+              {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
+                 que tant que la consigne de base n'a pas changé depuis. #}
+              {% set dg = derogations.get(p) %}
+              {% set derogee = dg is not none and dg | count == 2
+                               and ((dg[1] | float(default=-99)) - base) | abs < 0.05 %}
+              {% set t = (dg[0] | float(default=base)) if derogee else base %}
               {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+              {% set nd.bases = dict(nd.bases.items() | list + [(p, base | float)]) %}
               {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
+              {% if derogee %}{% set nd.derogees = nd.derogees + [p] %}{% endif %}
             {% endfor %}
             {{ nd.horaires }}
+          derogations: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set ns = namespace(presents=[]) %}
+            {% for q in ['leo', 'pablo', 'laurent'] %}
+              {% if is_state('input_boolean.presence_' ~ q, 'on') %}
+                {% set ns.presents = ns.presents + [q] %}
+              {% endif %}
+            {% endfor %}
+            {% set commun = 'schedule.chauffage_commun'
+               if states('schedule.chauffage_commun') in ['on', 'off']
+               else 'schedule.chauffage' %}
+            {% set brut = states('input_text.chauffage_derogations') %}
+            {% set derogations = brut | from_json if brut.startswith('{') else {} %}
+            {% set nd = namespace(consignes={}, bases={}, horaires={}, derogees=[]) %}
+            {% for p, c in cfg.items() %}
+              {% set occupe = c.occupants | select('in', ns.presents) | list | count > 0 %}
+              {% set boost = is_state('input_boolean.confort_' ~ p, 'on') %}
+              {% set confort = states('input_number.chauffage_' ~ p ~ '_confort')
+                               | float(default=c.confort) %}
+              {% set nuit = states('input_number.chauffage_' ~ p ~ '_nuit')
+                            | float(default=c.nuit) %}
+              {% set absence = states('input_number.chauffage_absence')
+                               | float(default=c.absence) %}
+              {% set propre = 'schedule.chauffage_' ~ p %}
+              {% set h = propre if states(propre) in ['on', 'off'] else commun %}
+              {% set horaire = is_state(h, 'on') %}
+              {# Température propre à la plage en cours, saisie dans ses « données
+                 supplémentaires » (temperature: 24). Sans elle : le curseur Confort. #}
+              {% set t_plage = (state_attr(h, 'temperature') if state_attr(h, 'temperature') is not none
+                                else state_attr(h, 'consigne')) if horaire else none %}
+              {% set confort_plage = t_plage | float(default=confort)
+                                     if t_plage is not none else confort %}
+              {% set base = ([confort, confort_plage] | max) if boost
+                            else (confort_plage if (occupe and horaire)
+                                  else (nuit if occupe else absence)) %}
+              {# Dérogation : température réglée à la main sur une vanne. Elle ne vaut
+                 que tant que la consigne de base n'a pas changé depuis. #}
+              {% set dg = derogations.get(p) %}
+              {% set derogee = dg is not none and dg | count == 2
+                               and ((dg[1] | float(default=-99)) - base) | abs < 0.05 %}
+              {% set t = (dg[0] | float(default=base)) if derogee else base %}
+              {% set nd.consignes = dict(nd.consignes.items() | list + [(p, t | float)]) %}
+              {% set nd.bases = dict(nd.bases.items() | list + [(p, base | float)]) %}
+              {% set nd.horaires = dict(nd.horaires.items() | list + [(p, h)]) %}
+              {% if derogee %}{% set nd.derogees = nd.derogees + [p] %}{% endif %}
+            {% endfor %}
+            {{ nd.derogees }}
           horaire_actif: >-
             {% set commun = 'schedule.chauffage_commun'
                if states('schedule.chauffage_commun') in ['on', 'off']
@@ -614,8 +769,11 @@ template:
                 {% set nl = namespace(l=[]) %}
                 {% for r in jours.get(j, []) %}
                   {% set fin = r['to'] | string %}
+                  {% set donnees = r.get('data') or {} %}
                   {% set nl.l = nl.l + [{'de': (r['from'] | string)[:5],
-                                         'a': '24:00' if '.999' in fin else fin[:5]}] %}
+                                         'a': '24:00' if '.999' in fin else fin[:5],
+                                         't': donnees.get('temperature',
+                                                          donnees.get('consigne'))}] %}
                 {% endfor %}
                 {% set nj.d = dict(nj.d.items() | list + [(j, nl.l)]) %}
               {% endfor %}
@@ -693,6 +851,24 @@ input_boolean:
   confort_salon:
     name: "Confort - Salon"
     icon: mdi:sofa
+
+input_text:
+  # Dérogations en cours : {pièce: [température réglée, consigne de base]}.
+  chauffage_derogations:
+    name: "Chauffage - réglages faits sur les vannes"
+    icon: mdi:hand-back-right
+    max: 255
+
+script:
+  chauffage_annuler_derogations:
+    alias: "Chauffage - annuler les réglages faits sur les vannes"
+    icon: mdi:undo-variant
+    sequence:
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.chauffage_derogations
+        data:
+          value: "{}"
 
 input_select:
   garde_enfants:
@@ -876,6 +1052,7 @@ automation:
           - input_boolean.confort_cuisine
           - input_boolean.confort_salon
           - input_number.chauffage_absence
+          - input_text.chauffage_derogations
           - input_number.chauffage_chambre_leo_confort
           - input_number.chauffage_chambre_leo_nuit
           - input_number.chauffage_chambre_pablo_confort
@@ -1197,3 +1374,110 @@ automation:
       - service: input_boolean.turn_on
         target:
           entity_id: input_boolean.chauffage_reglages_initialises
+
+  ##############################################################################
+  # Réglage fait à la main sur une vanne : il devient la consigne de la pièce.
+  #
+  # Chaque vanne renvoie sa consigne (attribut `temperature`). Si elle s'écarte
+  # de plus de 0,3 °C de ce que HA veut pour la pièce, c'est qu'on l'a
+  # tournée : on enregistre une dérogation. La tolérance absorbe l'arrondi au
+  # demi-degré des vannes ; un cran de molette (0,5 °C) la dépasse. Revenir à
+  # la consigne de base annule la dérogation.
+  #
+  # Ce que HA envoie lui-même aux vannes est égal à sa consigne : aucun
+  # risque de se prendre pour Laurent.
+  ##############################################################################
+  - id: chauffage_derogation_vanne
+    alias: "Chauffage - réglage fait sur une vanne"
+    mode: queued
+    max: 10
+    trigger:
+      - platform: state
+        attribute: temperature
+        entity_id:
+          - climate.vanne_thermo_leo_thermostat
+          - climate.vt_thermostat
+          - climate.sonoff_trvzb_thermostat
+          - climate.vt_boulangerie_thermostat
+          - climate.vtherrmo_cuisine_1_thermostat
+          - climate.vt_cuisine_couloir_thermostat
+          - climate.vt_salon_aquarium_thermostat
+          - climate.vt_salon_canape_thermostat
+    condition:
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.to_state is not none
+             and trigger.from_state.state not in ['unknown', 'unavailable']
+             and trigger.to_state.state not in ['unknown', 'unavailable', 'off']
+             and trigger.to_state.attributes.temperature is number }}
+    action:
+      - variables:
+          piece: >-
+            {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
+            {% set ns = namespace(p='') %}
+            {% for p, c in cfg.items() if trigger.entity_id in c.vannes %}
+              {% set ns.p = p %}
+            {% endfor %}
+            {{ ns.p }}
+          demandee: "{{ trigger.to_state.attributes.temperature | float }}"
+          voulue: >-
+            {{ (state_attr('sensor.chauffage_consignes', 'consignes') or {})
+                .get(piece, none) }}
+          base: >-
+            {{ (state_attr('sensor.chauffage_consignes', 'consignes_base') or {})
+                .get(piece, none) }}
+      - condition: template
+        value_template: >-
+          {{ piece != '' and voulue is number and base is number
+             and (demandee - voulue) | abs > 0.3 }}
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.chauffage_derogations
+        data:
+          value: >-
+            {% set brut = states('input_text.chauffage_derogations') %}
+            {% set d = brut | from_json if brut.startswith('{') else {} %}
+            {% set autres = d.items() | rejectattr('0', 'eq', piece) | list %}
+            {% set ajout = [(piece, [demandee, base])]
+                           if (demandee - base) | abs > 0.3 else [] %}
+            {{ dict(autres + ajout) | to_json }}
+
+  ##############################################################################
+  # Fin des dérogations : dès que la consigne de base d'une pièce change
+  # (nouvelle plage, départ ou retour d'un occupant), sa dérogation est
+  # retirée. Sans ce ménage, une dérogation périmée reviendrait le lendemain,
+  # à la même plage.
+  ##############################################################################
+  - id: chauffage_derogation_fin
+    alias: "Chauffage - fin des réglages faits sur les vannes"
+    mode: queued
+    max: 5
+    trigger:
+      - platform: state
+        entity_id: sensor.chauffage_consignes
+        attribute: consignes_base
+      - platform: time_pattern
+        minutes: "/15"
+    variables:
+      actuelles: >-
+        {% set brut = states('input_text.chauffage_derogations') %}
+        {{ (brut | from_json if brut.startswith('{') else {}) | to_json }}
+      restantes: >-
+        {% set brut = states('input_text.chauffage_derogations') %}
+        {% set d = brut | from_json if brut.startswith('{') else {} %}
+        {% set bases = state_attr('sensor.chauffage_consignes', 'consignes_base') or {} %}
+        {% set ns = namespace(d={}) %}
+        {% for p, v in d.items() if p in bases
+              and ((v[1] | float(default=-99)) - bases[p]) | abs < 0.05 %}
+          {% set ns.d = dict(ns.d.items() | list + [(p, v)]) %}
+        {% endfor %}
+        {{ ns.d | to_json }}
+    condition:
+      - condition: template
+        value_template: "{{ restantes != actuelles }}"
+    action:
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.chauffage_derogations
+        data:
+          value: "{{ restantes }}"

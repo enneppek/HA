@@ -11,6 +11,7 @@ par un identifiant d'entité : la correspondance est lue dans le bloc `pieces`,
 si bien qu'un renommage d'entité ne casse aucun test.
 """
 import datetime
+import json
 import yaml
 from jinja2 import Environment
 
@@ -34,6 +35,8 @@ TPL_TEMPS = capteur(chauffage, 'Chauffage températures')['attributes']['tempera
 TPL_ORIGINE = capteur(chauffage, 'Chauffage températures')['attributes']['origine']
 TPL_CONSIGNES = capteur(chauffage, 'Chauffage consignes')['attributes']['consignes']
 TPL_HORAIRES = capteur(chauffage, 'Chauffage consignes')['attributes']['horaires']
+TPL_BASES = capteur(chauffage, 'Chauffage consignes')['attributes']['consignes_base']
+TPL_DEROGEES = capteur(chauffage, 'Chauffage consignes')['attributes']['derogations']
 TPL_ETAT = capteur(chauffage, 'Chauffage consignes')['state']
 TPL_TEXT = capteur(chauffage, 'Chauffage température extérieure')['state']
 TPL_RELAIS = capteur(chauffage, 'Chauffage relais')['attributes']['relais']
@@ -59,6 +62,8 @@ def rendre_brut(tpl, globals_=None):
     env.filters['timestamp_custom'] = (
         lambda ts, fmt: datetime.datetime.fromtimestamp(ts).strftime(fmt))
     env.globals['as_timestamp'] = lambda dt: dt.timestamp()
+    env.filters['from_json'] = json.loads
+    env.filters['to_json'] = json.dumps
     env.globals.update(globals_ or {})
     return env.from_string(tpl).render().strip()
 
@@ -93,7 +98,7 @@ class Monde:
                  clim_froid=False, clim_chaud=False, assechement=False,
                  temp_min=True, clim_etat='off', clim_consigne=24.0, dernier='',
                  sondes_indispo=(), reglages=None, horaires=None, depuis=None,
-                 grilles=None):
+                 grilles=None, plages=None, derogations=''):
         # Valeurs par défaut conformes à l'installation : maintien d'une
         # température minimale, assèchement seulement sur demande, froid et
         # appoint chauffage désactivés.
@@ -110,6 +115,10 @@ class Monde:
         self.depuis = depuis or {}
         # Contenu des planifications, tel que le range sensor.chauffage_horaires.
         self.grilles = grilles
+        # Température portée par la plage en cours : {planification: °C}.
+        self.plages = plages or {}
+        # Contenu brut de input_text.chauffage_derogations.
+        self.derogations = derogations
         self.temp_min, self.clim_etat, self.clim_consigne = temp_min, clim_etat, clim_consigne
         # Mémoire du dernier ordre de HA (input_text.clim_dernier_ordre).
         self.dernier = dernier
@@ -156,6 +165,8 @@ class Monde:
             return 'on' if self.temp_min else 'off'
         if eid == 'input_text.clim_dernier_ordre':
             return self.dernier
+        if eid == 'input_text.chauffage_derogations':
+            return self.derogations
         if eid == 'input_boolean.clim_assechement':
             return 'on' if self.assechement else 'off'
         if eid.startswith('input_boolean.clim_auto_'):
@@ -176,12 +187,16 @@ class Monde:
             return self.temp_piece(PIECE_PAR_VANNE[eid])
         if eid in PIECE_PAR_CLIM and attr == 'temperature':
             return self.clim_consigne
+        if eid.startswith('schedule.') and attr == 'temperature':
+            return self.plages.get(eid)
         return {
             ('sensor.chauffage_configuration', 'pieces'): self.pieces,
             ('sensor.chauffage_temperatures', 'temperatures'): self.temperatures,
             ('sensor.chauffage_temperatures', 'origine'): self.origine,
             ('sensor.chauffage_consignes', 'consignes'): self.consignes,
             ('sensor.chauffage_consignes', 'horaires'): getattr(self, 'horaires_utilises', None),
+            ('sensor.chauffage_consignes', 'consignes_base'): getattr(self, 'bases', None),
+            ('sensor.chauffage_consignes', 'derogations'): getattr(self, 'derogees', None),
             ('sensor.chauffage_relais', 'relais'): self.relais,
             ('sensor.clim_pilotage', 'ordres'): self.ordres,
             ('sensor.chauffage_horaires', 'grilles'): self.grilles,
@@ -233,6 +248,8 @@ def evaluer(m):
     m.origine = eval(rendre(TPL_ORIGINE, m))
     m.consignes = eval(rendre(TPL_CONSIGNES, m))
     m.horaires_utilises = eval(rendre(TPL_HORAIRES, m))
+    m.bases = eval(rendre(TPL_BASES, m))
+    m.derogees = eval(rendre(TPL_DEROGEES, m))
     m.text = float(rendre(TPL_TEXT, m))
     m.relais = eval(rendre(TPL_RELAIS, m))
     m.demande = rendre(TPL_DEMANDE, m) == 'True'
@@ -306,9 +323,10 @@ def contenus_markdown(noeud):
 
 for scenario in ('maison pleine', 'maison vide'):
     presents = ['leo', 'pablo', 'laurent'] if scenario == 'maison pleine' else []
-    m_carte = Monde(presents=presents, clim_etat='heat', horaires={
+    m_carte = Monde(presents=presents, clim_etat='heat', derogations='{"salon": [22.0, 20.5]}',
+                    horaires={
         'schedule.chauffage_commun': 'on', 'schedule.chauffage_salon': 'off'}, grilles={
-        'schedule.chauffage_commun': {'monday': [{'de': '06:00', 'a': '08:30'}]},
+        'schedule.chauffage_commun': {'monday': [{'de': '06:00', 'a': '08:30', 't': 22}]},
         'schedule.chauffage_salon': {'monday': [{'de': '18:00', 'a': '24:00'}]},
         'schedule.chauffage': {'monday': [{'de': '06:00', 'a': '22:00'}]}})
     ok = True
@@ -317,6 +335,8 @@ for scenario in ('maison pleine', 'maison vide'):
         m_carte.origine = eval(rendre(TPL_ORIGINE, m_carte))
         m_carte.consignes = eval(rendre(TPL_CONSIGNES, m_carte))
         m_carte.horaires_utilises = eval(rendre(TPL_HORAIRES, m_carte))
+        m_carte.bases = eval(rendre(TPL_BASES, m_carte))
+        m_carte.derogees = eval(rendre(TPL_DEROGEES, m_carte))
         m_carte.text = float(rendre(TPL_TEXT, m_carte))
         m_carte.relais = eval(rendre(TPL_RELAIS, m_carte))
         m_carte.ordres = eval(rendre(TPL_ORDRES, m_carte))
@@ -348,7 +368,8 @@ def entites_referencees(noeud):
 
 connues = set()
 for paquet in (chauffage, clim_pkg):
-    for domaine in ('input_boolean', 'input_number', 'input_select', 'input_text', 'schedule'):
+    for domaine in ('input_boolean', 'input_number', 'input_select', 'input_text', 'schedule',
+                    'script'):
         connues |= {f"{domaine}.{cle}" for cle in (paquet.get(domaine) or {})}
     for bloc in paquet.get('template', []):
         for domaine in ('sensor', 'binary_sensor'):
@@ -357,7 +378,7 @@ for c in PIECES.values():
     connues |= set(c['vannes']) | {c['sonde'], c['humidite'], c['clim']} - {None}
 # Planifications créées dans l'interface par Laurent.
 connues |= {'climate.thermostat_thermostat', 'schedule.chauffage_commun',
-            'schedule.clim_chambre'}
+            'schedule.clim_chambre'} | {f"schedule.chauffage_{p}" for p in PIECES}
 inconnues = sorted(set(entites_referencees(carte)) - connues)
 verifier("toutes les entités de la carte existent", inconnues, [])
 
@@ -513,14 +534,18 @@ reponse = {
                    {'from': datetime.time(16, 30), 'to': datetime.time(22, 0)}],
         'saturday': [{'from': datetime.time(8, 0), 'to': datetime.time.max}],
         'sunday': [{'from': '08:00:00', 'to': '22:00:00'}],
+        'friday': [{'from': datetime.time(6, 0), 'to': datetime.time(8, 0),
+                    'data': {'temperature': 24}}],
     },
 }
 grilles = eval(rendre_brut(TPL_GRILLES, {'reponse': reponse}))
 commun = grilles['schedule.chauffage_commun']
 verifier("plages converties en texte HH:MM",
-         commun['monday'], [{'de': '06:00', 'a': '08:30'}, {'de': '16:30', 'a': '22:00'}])
-verifier("fin à minuit affichée 24:00", commun['saturday'], [{'de': '08:00', 'a': '24:00'}])
-verifier("heures déjà en texte : acceptées", commun['sunday'], [{'de': '08:00', 'a': '22:00'}])
+         commun['monday'], [{'de': '06:00', 'a': '08:30', 't': None},
+                            {'de': '16:30', 'a': '22:00', 't': None}])
+verifier("fin à minuit affichée 24:00", commun['saturday'], [{'de': '08:00', 'a': '24:00', 't': None}])
+verifier("heures déjà en texte : acceptées", commun['sunday'], [{'de': '08:00', 'a': '22:00', 't': None}])
+verifier("température de la plage reprise", commun['friday'], [{'de': '06:00', 'a': '08:00', 't': 24}])
 verifier("jour sans plage : liste vide", commun['tuesday'], [])
 verifier("aucune réponse : aucun horaire", eval(rendre_brut(TPL_GRILLES, {'reponse': None})), {})
 
@@ -579,6 +604,92 @@ m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
                   horaires={'schedule.chauffage_commun': 'unavailable'}))
 verifier("horaire commun indisponible : retour à l'horaire par défaut",
          m.horaires_utilises['cuisine'], 'schedule.chauffage')
+
+titre("Une température par plage")
+tous = ['leo', 'pablo', 'laurent']
+m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_sdb_enfants': 'on'},
+                  plages={'schedule.chauffage_sdb_enfants': 24}))
+verifier("SdB, plage 6-8 h à 24° : consigne 24°", m.consignes['sdb_enfants'], 24.0)
+m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_sdb_enfants': 'on'},
+                  plages={'schedule.chauffage_sdb_enfants': 15}))
+verifier("SdB, plage 8-19 h à 15° : consigne 15°, même sous le confort",
+         m.consignes['sdb_enfants'], 15.0)
+m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_sdb_enfants': 'on'},
+                  plages={'schedule.chauffage_sdb_enfants': 15}, boosts=['sdb_enfants']))
+verifier("  -> confort immédiat pendant cette plage : confort (21°)",
+         m.consignes['sdb_enfants'], 21.0)
+m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_sdb_enfants': 'on'}))
+verifier("plage sans température : curseur confort", m.consignes['sdb_enfants'], 21.0)
+m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_sdb_enfants': 'off'}))
+verifier("hors de toute plage : nuit", m.consignes['sdb_enfants'], 18.0)
+m = evaluer(Monde(presents=['laurent'], horaires={'schedule.chauffage_sdb_enfants': 'on'},
+                  plages={'schedule.chauffage_sdb_enfants': 24}))
+verifier("plage à 24° mais enfants absents : absence (15°)", m.consignes['sdb_enfants'], 15.0)
+m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_commun': 'on'},
+                  plages={'schedule.chauffage_commun': 20}))
+verifier("plage à 20° dans l'horaire commun : vaut pour les pièces qui le suivent",
+         [m.consignes['cuisine'], m.consignes['chambre_leo']], [20.0, 20.0])
+m = evaluer(Monde(presents=['laurent'], temps={'chambre_laurent': 18.0},
+                  horaires={'schedule.clim_chambre': 'on'}, plages={'schedule.clim_chambre': 21}))
+verifier("clim : plage à 21° de son horaire", m.ordres['chambre_laurent']['temp'], 21.0)
+
+titre("Réglage fait sur une vanne")
+m = evaluer(Monde(presents=tous, derogations='{"salon": [22.0, 20.5]}'))
+verifier("salon réglé à 22° sur la vanne (base 20,5°) : consigne 22°", m.consignes['salon'], 22.0)
+verifier("  -> signalé comme dérogation", m.derogees, ['salon'])
+verifier("  -> la base reste connue", m.bases['salon'], 20.5)
+verifier("  -> les autres pièces ne bougent pas", m.consignes['cuisine'], 19.0)
+m = evaluer(Monde(presents=tous, horaire=False, derogations='{"salon": [22.0, 20.5]}'))
+verifier("changement de plage (base passe à 17,5°) : la dérogation tombe",
+         (m.consignes['salon'], m.derogees), (17.5, []))
+m = evaluer(Monde(presents=tous, derogations='', temps={p: 20.0 for p in PIECES}))
+verifier("aucune dérogation : texte vide accepté", m.derogees, [])
+
+m = evaluer(Monde(presents=tous, derogations='{"chambre_leo": [22.0, 19.5]}',
+                  temps={**{p: 25.0 for p in PIECES}, 'chambre_leo': 20.0}))
+verifier("chambre réglée à 22° sur la vanne, à 20° : la chaudière suit",
+         rendre(TPL_DEMANDE, m), 'True')
+
+detection = next(a for a in chauffage['automation'] if a['id'] == 'chauffage_derogation_vanne')
+garde_detection = detection['action'][1]['value_template']
+tpl_nouvelle = detection['action'][2]['data']['value']
+tpl_piece = detection['action'][0]['variables']['piece']
+
+
+def reglage_vanne(vanne, demandee, derogations=''):
+    """Rejoue la détection : pièce trouvée, déclenchement, nouveau contenu."""
+    m = evaluer(Monde(presents=tous, derogations=derogations))
+    trig = {'entity_id': vanne}
+    piece = rendre_brut(tpl_piece, {'state_attr': m.state_attr, 'trigger': trig})
+    variables = {'piece': piece, 'demandee': demandee,
+                 'voulue': m.consignes[piece], 'base': m.bases[piece],
+                 'states': Etats(m), 'trigger': trig}
+    return (piece, rendre_brut(garde_detection, variables),
+            json.loads(rendre_brut(tpl_nouvelle, variables)))
+
+
+verifier("vanne canapé montée à 22° : pièce salon, dérogation enregistrée",
+         reglage_vanne('climate.vt_salon_canape_thermostat', 22.0),
+         ('salon', 'True', {'salon': [22.0, 20.5]}))
+verifier("valeur renvoyée par la vanne égale à la consigne (ordre de HA) : ignorée",
+         reglage_vanne('climate.vt_salon_canape_thermostat', 20.5)[1], 'False')
+verifier("arrondi au demi-degré de la vanne (0,2°) : ignoré",
+         reglage_vanne('climate.vt_salon_canape_thermostat', 20.7)[1], 'False')
+verifier("vanne remise à la base pendant une dérogation : dérogation retirée",
+         reglage_vanne('climate.vt_salon_canape_thermostat', 20.5,
+                       '{"salon": [22.0, 20.5]}')[1:],
+         ('True', {}))
+verifier("deuxième pièce réglée : les deux dérogations coexistent",
+         reglage_vanne('climate.vanne_thermo_leo_thermostat', 21.0,
+                       '{"salon": [22.0, 20.5]}')[2],
+         {'salon': [22.0, 20.5], 'chambre_leo': [21.0, 19.5]})
+
+menage = next(a for a in chauffage['automation'] if a['id'] == 'chauffage_derogation_fin')
+m = evaluer(Monde(presents=tous, horaire=False,
+                  derogations='{"salon": [22.0, 20.5], "chambre_leo": [16.0, 17.0]}'))
+restantes = json.loads(rendre(menage['variables']['restantes'], m))
+verifier("ménage : dérogation périmée retirée, celle encore valable gardée",
+         restantes, {'chambre_leo': [16.0, 17.0]})
 
 titre("Pièces communes")
 m = evaluer(Monde(presents=['leo'], semaine=41))

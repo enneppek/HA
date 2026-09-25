@@ -266,6 +266,46 @@ La chambre de Lolo n'a pas ces réglages : sa clim n'y chauffe pas, sauf à
 activer l'appoint chauffage. Elle maintient une température minimale, et
 n'assèche que sur demande (voir plus bas).
 
+### Une température par plage
+
+Chaque plage d'un horaire peut porter sa propre consigne. Dans la grille,
+cliquer sur la plage, ouvrir **Paramètres avancés**, et écrire dans
+*Données supplémentaires* :
+
+```yaml
+temperature: 24
+```
+
+Pendant cette plage, la pièce vise 24 °C, si l'un de ses occupants est
+présent. Exemple pour la salle de bains enfants : 6 h - 8 h à 24 °C,
+8 h - 19 h à 15 °C, 19 h - 21 h à 22 °C. Une plage sans température prend le
+curseur *Confort* de la pièce ; hors de toute plage, c'est la température de
+*Nuit* ; sans occupant, celle d'absence. Le « confort immédiat » l'emporte
+sur une plage plus froide. L'horaire de la clim accepte la même donnée.
+
+HA lit ces données dans les attributs de la planification, qui expose ceux
+de la plage en cours (vérifié dans le code source de HA et de son
+interface). Une température posée sur l'horaire commun vaut pour toutes les
+pièces qui le suivent : pour des consignes différentes, chaque pièce a son
+horaire propre.
+
+### Réglage fait sur une vanne
+
+Tourner une vanne Sonoff à la main fixe la consigne de sa pièce : HA ne la
+défait plus, et la chaudière suit. C'est une **dérogation**, qui dure
+jusqu'au prochain changement de la consigne de base (nouvelle plage,
+départ ou retour d'un occupant) ; l'horaire reprend alors. Remettre la vanne
+à la consigne de base l'annule aussi, et un bouton du tableau de bord les
+annule toutes. La vue d'ensemble marque ✋ les pièces concernées.
+
+La détection compare la consigne renvoyée par chaque vanne à celle que HA
+veut pour la pièce : au-delà de 0,3 °C, c'est un réglage manuel. La
+tolérance absorbe l'arrondi au demi-degré des vannes ; un cran de molette la
+dépasse. Les dérogations sont mémorisées dans
+`input_text.chauffage_derogations` (`{pièce: [réglée, base]}`) et retirées
+dès que la base change — sans quoi une dérogation périmée reviendrait le
+lendemain, à la même plage.
+
 ### Horaires
 
 Une planification définie en YAML n'est pas modifiable dans l'interface. Les

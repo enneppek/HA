@@ -71,15 +71,29 @@ views:
               {% set o = state_attr('sensor.chauffage_temperatures', 'origine') or {} %}
               {% set cfg = state_attr('sensor.chauffage_configuration', 'pieces') or {} %}
               {% set r = state_attr('sensor.chauffage_relais', 'relais') or {} %}
+              {% set dg = state_attr('sensor.chauffage_consignes', 'derogations') or [] %}
               | Pièce | Mesure | Consigne | Horaire |
               |:--|--:|--:|:--|
               {%- for p, cible in c.items() %}
               {%- set hp = h.get(p, 'schedule.chauffage') %}
-              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | {{ 'clim' if r.get(p) == 'clim' else '**' ~ cible ~ ' °C**' }} | {{ '—' if r.get(p) == 'clim' else ('🟢' if is_state(hp, 'on') else '⚪') ~ (' ✎' if hp == 'schedule.chauffage_' ~ p else '') }} |
+              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | {{ 'clim' if r.get(p) == 'clim' else '**' ~ cible ~ ' °C**' ~ (' ✋' if p in dg else '') }} | {{ '—' if r.get(p) == 'clim' else ('🟢' if is_state(hp, 'on') else '⚪') ~ (' ✎' if hp == 'schedule.chauffage_' ~ p else '') }} |
               {%- endfor %}
 
-              🟢 dans l'horaire (confort) · ⚪ hors horaire (nuit) · ✎ horaire propre à la pièce ·
+              🟢 dans l'horaire · ⚪ hors horaire (nuit) · ✎ horaire propre à la pièce ·
+              ✋ réglée sur la vanne, jusqu'au prochain changement de plage ·
               \* mesurée par les vannes, faute de sonde
+
+          - type: tile
+            entity: script.chauffage_annuler_derogations
+            name: Annuler les réglages faits sur les vannes
+            icon: mdi:undo-variant
+            color: grey
+            hide_state: true
+            tap_action:
+              action: perform-action
+              perform_action: script.chauffage_annuler_derogations
+            grid_options:
+              columns: full
 
       # --- Qui est à la maison ----------------------------------------------
       - type: grid
@@ -190,7 +204,8 @@ views:
               {%- endfor %}
               {%- set nb.s = nb.s ~ ('█' if dedans.v else '░') %}
               {%- endfor %}
-              {%- for p in plages %}{% set nb.t = nb.t + [p.de ~ '–' ~ p.a] %}{% endfor %}
+              {%- for p in plages %}{% set nb.t = nb.t + [p.de ~ '–' ~ p.a
+                    ~ (' **' ~ p.t ~ '°**' if p.get('t') is not none else '')] %}{% endfor %}
               | {{ court }} | `{{ nb.s }}` | {{ nb.t | join(' · ') if nb.t else 'aucune' }} |
               {%- endfor %}
               {%- endif %}
@@ -204,6 +219,12 @@ views:
             grid_options:
               columns: full
             content: |
+              **Une température par plage.** Clique sur une plage de la grille,
+              ouvre **Paramètres avancés**, et écris dans *Données supplémentaires* :
+              `temperature: 24`. Pendant cette plage, la pièce vise 24 °C. Une plage
+              sans température prend le curseur *Confort* de la pièce ; hors de
+              toute plage, c'est la température de *Nuit*.
+
               Clique sur l'horaire commun, puis sur ⚙️, pour le modifier.
               Pour qu'une pièce ait **ses propres heures**, crée une planification
               portant exactement l'un de ces noms :
@@ -282,6 +303,19 @@ views:
                 style: buttons
             grid_options:
               columns: 6
+          # Visible seulement une fois l'horaire propre créé : une entité
+          # absente est évaluée « unavailable » par l'interface.
+          - type: tile
+            entity: schedule.chauffage_chambre_leo
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_chambre_leo
+                state_not: unavailable
+            grid_options:
+              columns: full
           - type: tile
             entity: input_number.chauffage_chambre_leo_nuit
             name: Nuit
@@ -347,6 +381,19 @@ views:
                 style: buttons
             grid_options:
               columns: 6
+          # Visible seulement une fois l'horaire propre créé : une entité
+          # absente est évaluée « unavailable » par l'interface.
+          - type: tile
+            entity: schedule.chauffage_chambre_pablo
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_chambre_pablo
+                state_not: unavailable
+            grid_options:
+              columns: full
           - type: tile
             entity: input_number.chauffage_chambre_pablo_nuit
             name: Nuit
@@ -412,6 +459,19 @@ views:
                 style: buttons
             grid_options:
               columns: 6
+          # Visible seulement une fois l'horaire propre créé : une entité
+          # absente est évaluée « unavailable » par l'interface.
+          - type: tile
+            entity: schedule.chauffage_sdb_enfants
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_sdb_enfants
+                state_not: unavailable
+            grid_options:
+              columns: full
           - type: tile
             entity: input_number.chauffage_sdb_enfants_nuit
             name: Nuit
@@ -477,6 +537,19 @@ views:
                 style: buttons
             grid_options:
               columns: 6
+          # Visible seulement une fois l'horaire propre créé : une entité
+          # absente est évaluée « unavailable » par l'interface.
+          - type: tile
+            entity: schedule.chauffage_boulangerie
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_boulangerie
+                state_not: unavailable
+            grid_options:
+              columns: full
           - type: tile
             entity: input_number.chauffage_boulangerie_nuit
             name: Nuit
@@ -542,6 +615,19 @@ views:
                 style: buttons
             grid_options:
               columns: 6
+          # Visible seulement une fois l'horaire propre créé : une entité
+          # absente est évaluée « unavailable » par l'interface.
+          - type: tile
+            entity: schedule.chauffage_cuisine
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_cuisine
+                state_not: unavailable
+            grid_options:
+              columns: full
           - type: tile
             entity: input_number.chauffage_cuisine_nuit
             name: Nuit
@@ -607,6 +693,19 @@ views:
                 style: buttons
             grid_options:
               columns: 6
+          # Visible seulement une fois l'horaire propre créé : une entité
+          # absente est évaluée « unavailable » par l'interface.
+          - type: tile
+            entity: schedule.chauffage_salon
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_salon
+                state_not: unavailable
+            grid_options:
+              columns: full
           - type: tile
             entity: input_number.chauffage_salon_nuit
             name: Nuit
