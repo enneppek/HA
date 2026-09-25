@@ -414,6 +414,27 @@ def cles_state_image(noeud):
 verifier("toutes les clés de state_image sont des textes",
          [k for k in cles_state_image(carte) if not isinstance(k, str)], [])
 
+def cartes(noeud):
+    if isinstance(noeud, dict):
+        if 'type' in noeud and ('entity' in noeud or 'cards' in noeud):
+            yield noeud
+        for valeur in noeud.values():
+            yield from cartes(valeur)
+    elif isinstance(noeud, list):
+        for valeur in noeud:
+            yield from cartes(valeur)
+
+
+# Un horaire propre n'existe que si Laurent l'a créé : sa tuile doit rester
+# masquée d'ici là, sans quoi s'affiche « Entité non trouvée ».
+propres = [c for c in cartes(carte) if str(c.get('entity', '')).startswith('schedule.chauffage_')
+           and c['entity'] != 'schedule.chauffage_commun']
+verifier("les tuiles d'horaire propre ne s'affichent que s'il existe",
+         [c['entity'] for c in propres
+          if c.get('visibility') != [{'condition': 'state', 'entity': c['entity'],
+                                      'state': ['on', 'off']}]], [])
+verifier("  -> une par pièce à vannes", len(propres), 6)
+
 titre("Clim : rôle affiché sur le tableau de bord")
 m = evaluer(Monde(presents=['laurent'], semaine=41, assechement=True,
                   temps={'chambre_laurent': 19.0}))

@@ -304,19 +304,6 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Visible seulement une fois l'horaire propre créé : une entité
-          # absente est évaluée « unavailable » par l'interface.
-          - type: tile
-            entity: schedule.chauffage_chambre_leo
-            name: Horaire de la pièce
-            icon: mdi:calendar-edit
-            color: green
-            visibility:
-              - condition: state
-                entity: schedule.chauffage_chambre_leo
-                state_not: unavailable
-            grid_options:
-              columns: full
           # Décoché : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
@@ -330,6 +317,22 @@ views:
             grid_options:
               columns: 6
               rows: 2
+          # N'apparaît qu'une fois l'horaire propre créé. On exige l'un des deux
+          # seuls états d'une planification existante (« on » / « off ») : une
+          # entité absente ne vaut pas forcément « unavailable » à l'écran.
+          - type: tile
+            entity: schedule.chauffage_chambre_leo
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_chambre_leo
+                state:
+                  - "on"
+                  - "off"
+            grid_options:
+              columns: full
 
       - type: grid
         cards:
@@ -384,19 +387,6 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Visible seulement une fois l'horaire propre créé : une entité
-          # absente est évaluée « unavailable » par l'interface.
-          - type: tile
-            entity: schedule.chauffage_chambre_pablo
-            name: Horaire de la pièce
-            icon: mdi:calendar-edit
-            color: green
-            visibility:
-              - condition: state
-                entity: schedule.chauffage_chambre_pablo
-                state_not: unavailable
-            grid_options:
-              columns: full
           # Décoché : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
@@ -410,6 +400,22 @@ views:
             grid_options:
               columns: 6
               rows: 2
+          # N'apparaît qu'une fois l'horaire propre créé. On exige l'un des deux
+          # seuls états d'une planification existante (« on » / « off ») : une
+          # entité absente ne vaut pas forcément « unavailable » à l'écran.
+          - type: tile
+            entity: schedule.chauffage_chambre_pablo
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_chambre_pablo
+                state:
+                  - "on"
+                  - "off"
+            grid_options:
+              columns: full
 
       - type: grid
         cards:
@@ -464,19 +470,6 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Visible seulement une fois l'horaire propre créé : une entité
-          # absente est évaluée « unavailable » par l'interface.
-          - type: tile
-            entity: schedule.chauffage_sdb_enfants
-            name: Horaire de la pièce
-            icon: mdi:calendar-edit
-            color: green
-            visibility:
-              - condition: state
-                entity: schedule.chauffage_sdb_enfants
-                state_not: unavailable
-            grid_options:
-              columns: full
           # Décoché : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
@@ -490,6 +483,22 @@ views:
             grid_options:
               columns: 6
               rows: 2
+          # N'apparaît qu'une fois l'horaire propre créé. On exige l'un des deux
+          # seuls états d'une planification existante (« on » / « off ») : une
+          # entité absente ne vaut pas forcément « unavailable » à l'écran.
+          - type: tile
+            entity: schedule.chauffage_sdb_enfants
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_sdb_enfants
+                state:
+                  - "on"
+                  - "off"
+            grid_options:
+              columns: full
 
       - type: grid
         cards:
@@ -544,19 +553,6 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Visible seulement une fois l'horaire propre créé : une entité
-          # absente est évaluée « unavailable » par l'interface.
-          - type: tile
-            entity: schedule.chauffage_boulangerie
-            name: Horaire de la pièce
-            icon: mdi:calendar-edit
-            color: green
-            visibility:
-              - condition: state
-                entity: schedule.chauffage_boulangerie
-                state_not: unavailable
-            grid_options:
-              columns: full
           # Décoché : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
@@ -570,6 +566,22 @@ views:
             grid_options:
               columns: 6
               rows: 2
+          # N'apparaît qu'une fois l'horaire propre créé. On exige l'un des deux
+          # seuls états d'une planification existante (« on » / « off ») : une
+          # entité absente ne vaut pas forcément « unavailable » à l'écran.
+          - type: tile
+            entity: schedule.chauffage_boulangerie
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_boulangerie
+                state:
+                  - "on"
+                  - "off"
+            grid_options:
+              columns: full
 
       - type: grid
         cards:
@@ -624,19 +636,6 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Visible seulement une fois l'horaire propre créé : une entité
-          # absente est évaluée « unavailable » par l'interface.
-          - type: tile
-            entity: schedule.chauffage_cuisine
-            name: Horaire de la pièce
-            icon: mdi:calendar-edit
-            color: green
-            visibility:
-              - condition: state
-                entity: schedule.chauffage_cuisine
-                state_not: unavailable
-            grid_options:
-              columns: full
           # Décoché : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
@@ -650,6 +649,22 @@ views:
             grid_options:
               columns: 6
               rows: 2
+          # N'apparaît qu'une fois l'horaire propre créé. On exige l'un des deux
+          # seuls états d'une planification existante (« on » / « off ») : une
+          # entité absente ne vaut pas forcément « unavailable » à l'écran.
+          - type: tile
+            entity: schedule.chauffage_cuisine
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_cuisine
+                state:
+                  - "on"
+                  - "off"
+            grid_options:
+              columns: full
 
       - type: grid
         cards:
@@ -704,19 +719,6 @@ views:
                 style: buttons
             grid_options:
               columns: 6
-          # Visible seulement une fois l'horaire propre créé : une entité
-          # absente est évaluée « unavailable » par l'interface.
-          - type: tile
-            entity: schedule.chauffage_salon
-            name: Horaire de la pièce
-            icon: mdi:calendar-edit
-            color: green
-            visibility:
-              - condition: state
-                entity: schedule.chauffage_salon
-                state_not: unavailable
-            grid_options:
-              columns: full
           # Décoché : la pièce reste à la température de nuit, commune à
           # toutes les pièces (carte Réglages).
           - type: tile
@@ -730,6 +732,22 @@ views:
             grid_options:
               columns: 6
               rows: 2
+          # N'apparaît qu'une fois l'horaire propre créé. On exige l'un des deux
+          # seuls états d'une planification existante (« on » / « off ») : une
+          # entité absente ne vaut pas forcément « unavailable » à l'écran.
+          - type: tile
+            entity: schedule.chauffage_salon
+            name: Horaire de la pièce
+            icon: mdi:calendar-edit
+            color: green
+            visibility:
+              - condition: state
+                entity: schedule.chauffage_salon
+                state:
+                  - "on"
+                  - "off"
+            grid_options:
+              columns: full
 
       # --- Chambre de Lolo : clim seule -------------------------------------
       - type: grid
