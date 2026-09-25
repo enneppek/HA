@@ -108,16 +108,22 @@ le capteur « unavailable », sans autre signal.
 Package actif depuis le 24/09/2026 : tous les capteurs `sensor.chauffage_*`
 ont une valeur, la sonde `t_hr` de Léo est revenue. Calendrier de garde
 confirmé : semaine impaire = enfants présents. Sans aucun enfant présent,
-leurs deux chambres et la salle de bains restent à la température d'absence
+leurs deux chambres et la salle de bains restent à la température de nuit
 (15 °C) : choix confirmé par Laurent, de préférence à un arrêt complet (OFF).
 
 ## Réglages et horaires
 
-- Confort et nuit par pièce : `input_number.chauffage_<pièce>_confort` / `_nuit` ;
-  absence commune : `input_number.chauffage_absence`.
-- Aucun `initial:` : les valeurs de départ sont posées une seule fois par
-  `chauffage_initialiser_reglages`, verrouillée par
-  `input_boolean.chauffage_reglages_initialises`.
+- Confort par pièce : `input_number.chauffage_<pièce>_confort`. Nuit
+  **unique** pour toutes les pièces à vannes : `input_number.chauffage_nuit`
+  (15 °C), qui vaut aussi pour l'absence et les pièces décochées — choix de
+  Laurent, pas de nuit par pièce.
+- Bouton par pièce `input_boolean.chauffage_<pièce>_actif` : décoché, la
+  pièce reste à la nuit (seul le confort immédiat ou une vanne réglée à la
+  main passent outre).
+- Aucun `initial:` : les valeurs de départ sont posées une fois par version
+  par `chauffage_initialiser_reglages` (interrupteurs
+  `chauffage_reglages_initialises`, `chauffage_reglages_v2`). Tout nouveau
+  réglage demande une nouvelle étape, sinon il démarre à sa valeur minimale.
 - Horaires créés dans l'interface (modifiables) : `schedule.chauffage_<pièce>`,
   sinon `schedule.chauffage_commun`, sinon `schedule.chauffage` (YAML, secours).
   L'attribut `horaires` de `sensor.chauffage_consignes` indique lequel chaque

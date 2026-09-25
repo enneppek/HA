@@ -76,11 +76,12 @@ views:
               |:--|--:|--:|:--|
               {%- for p, cible in c.items() %}
               {%- set hp = h.get(p, 'schedule.chauffage') %}
-              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | {{ 'clim' if r.get(p) == 'clim' else '**' ~ cible ~ ' °C**' ~ (' ✋' if p in dg else '') }} | {{ '—' if r.get(p) == 'clim' else ('🟢' if is_state(hp, 'on') else '⚪') ~ (' ✎' if hp == 'schedule.chauffage_' ~ p else '') }} |
+              | {{ cfg.get(p, {}).get('nom', p) }} | {{ t.get(p) if t.get(p) is not none else '?' }} °C{{ ' \\*' if o.get(p) == 'vannes' else '' }} | {{ 'clim' if r.get(p) == 'clim' else '**' ~ cible ~ ' °C**' ~ (' ✋' if p in dg else '') ~ (' ⏸' if is_state('input_boolean.chauffage_' ~ p ~ '_actif', 'off') else '') }} | {{ '—' if r.get(p) == 'clim' else ('🟢' if is_state(hp, 'on') else '⚪') ~ (' ✎' if hp == 'schedule.chauffage_' ~ p else '') }} |
               {%- endfor %}
 
               🟢 dans l'horaire · ⚪ hors horaire (nuit) · ✎ horaire propre à la pièce ·
               ✋ réglée sur la vanne, jusqu'au prochain changement de plage ·
+              ⏸ chauffage de la pièce coupé ·
               \* mesurée par les vannes, faute de sonde
 
           - type: tile
@@ -223,7 +224,7 @@ views:
               ouvre **Paramètres avancés**, et écris dans *Données supplémentaires* :
               `temperature: 24`. Pendant cette plage, la pièce vise 24 °C. Une plage
               sans température prend le curseur *Confort* de la pièce ; hors de
-              toute plage, c'est la température de *Nuit*.
+              toute plage, c'est la température de *nuit*, commune à toutes les pièces.
 
               Clique sur l'horaire commun, puis sur ⚙️, pour le modifier.
               Pour qu'une pièce ait **ses propres heures**, crée une planification
@@ -316,17 +317,19 @@ views:
                 state_not: unavailable
             grid_options:
               columns: full
+          # Décoché : la pièce reste à la température de nuit, commune à
+          # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_number.chauffage_chambre_leo_nuit
-            name: Nuit
-            icon: mdi:weather-night
-            color: indigo
-            features_position: bottom
-            features:
-              - type: numeric-input
-                style: buttons
+            entity: input_boolean.chauffage_chambre_leo_actif
+            name: Chauffer la pièce
+            icon: mdi:radiator
+            color: deep-orange
+            vertical: true
+            tap_action:
+              action: toggle
             grid_options:
               columns: 6
+              rows: 2
 
       - type: grid
         cards:
@@ -394,17 +397,19 @@ views:
                 state_not: unavailable
             grid_options:
               columns: full
+          # Décoché : la pièce reste à la température de nuit, commune à
+          # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_number.chauffage_chambre_pablo_nuit
-            name: Nuit
-            icon: mdi:weather-night
-            color: indigo
-            features_position: bottom
-            features:
-              - type: numeric-input
-                style: buttons
+            entity: input_boolean.chauffage_chambre_pablo_actif
+            name: Chauffer la pièce
+            icon: mdi:radiator
+            color: deep-orange
+            vertical: true
+            tap_action:
+              action: toggle
             grid_options:
               columns: 6
+              rows: 2
 
       - type: grid
         cards:
@@ -472,17 +477,19 @@ views:
                 state_not: unavailable
             grid_options:
               columns: full
+          # Décoché : la pièce reste à la température de nuit, commune à
+          # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_number.chauffage_sdb_enfants_nuit
-            name: Nuit
-            icon: mdi:weather-night
-            color: indigo
-            features_position: bottom
-            features:
-              - type: numeric-input
-                style: buttons
+            entity: input_boolean.chauffage_sdb_enfants_actif
+            name: Chauffer la pièce
+            icon: mdi:radiator
+            color: deep-orange
+            vertical: true
+            tap_action:
+              action: toggle
             grid_options:
               columns: 6
+              rows: 2
 
       - type: grid
         cards:
@@ -550,17 +557,19 @@ views:
                 state_not: unavailable
             grid_options:
               columns: full
+          # Décoché : la pièce reste à la température de nuit, commune à
+          # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_number.chauffage_boulangerie_nuit
-            name: Nuit
-            icon: mdi:weather-night
-            color: indigo
-            features_position: bottom
-            features:
-              - type: numeric-input
-                style: buttons
+            entity: input_boolean.chauffage_boulangerie_actif
+            name: Chauffer la pièce
+            icon: mdi:radiator
+            color: deep-orange
+            vertical: true
+            tap_action:
+              action: toggle
             grid_options:
               columns: 6
+              rows: 2
 
       - type: grid
         cards:
@@ -628,17 +637,19 @@ views:
                 state_not: unavailable
             grid_options:
               columns: full
+          # Décoché : la pièce reste à la température de nuit, commune à
+          # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_number.chauffage_cuisine_nuit
-            name: Nuit
-            icon: mdi:weather-night
-            color: indigo
-            features_position: bottom
-            features:
-              - type: numeric-input
-                style: buttons
+            entity: input_boolean.chauffage_cuisine_actif
+            name: Chauffer la pièce
+            icon: mdi:radiator
+            color: deep-orange
+            vertical: true
+            tap_action:
+              action: toggle
             grid_options:
               columns: 6
+              rows: 2
 
       - type: grid
         cards:
@@ -706,17 +717,19 @@ views:
                 state_not: unavailable
             grid_options:
               columns: full
+          # Décoché : la pièce reste à la température de nuit, commune à
+          # toutes les pièces (carte Réglages).
           - type: tile
-            entity: input_number.chauffage_salon_nuit
-            name: Nuit
-            icon: mdi:weather-night
-            color: indigo
-            features_position: bottom
-            features:
-              - type: numeric-input
-                style: buttons
+            entity: input_boolean.chauffage_salon_actif
+            name: Chauffer la pièce
+            icon: mdi:radiator
+            color: deep-orange
+            vertical: true
+            tap_action:
+              action: toggle
             grid_options:
               columns: 6
+              rows: 2
 
       # --- Chambre de Lolo : clim seule -------------------------------------
       - type: grid
@@ -952,8 +965,8 @@ views:
             grid_options:
               columns: full
             entities:
-              - entity: input_number.chauffage_absence
-                name: Température d'absence
+              - entity: input_number.chauffage_nuit
+                name: Température de nuit (toutes les pièces)
               - entity: input_number.duree_confort
                 name: Durée du confort immédiat
               - entity: schedule.chauffage

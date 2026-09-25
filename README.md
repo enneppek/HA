@@ -29,8 +29,11 @@ depuis une machine du réseau local, qui elle a accès à l'instance.
 
 Aucun réglage ne porte de `initial:` : Home Assistant réimposerait sinon
 cette valeur à chaque redémarrage, effaçant ce qui a été réglé depuis la
-carte. Les valeurs de départ sont posées **une seule fois**, au premier
-démarrage, par l'automatisation `chauffage_initialiser_reglages`. Elle active
+carte. Les valeurs de départ sont posées **une seule fois par version**, par
+l'automatisation `chauffage_initialiser_reglages` : un nouveau réglage
+démarrant à sa valeur minimale, chaque version pose les siens (verrouillée
+par son interrupteur, `chauffage_reglages_initialises` puis
+`chauffage_reglages_v2`) sans toucher aux réglages déjà faits. Elle active
 aussi la présence de Laurent et « Maintenir une température minimale ».
 
 Pour revenir aux valeurs d'usine : éteindre
@@ -139,15 +142,15 @@ homeassistant:
 
 ## Pièces
 
-| Pièce | Vannes | Température lue sur | Occupants | Confort / Nuit / Absence |
+| Pièce | Vannes | Température lue sur | Occupants | Confort |
 |---|---|---|---|---|
-| Chambre Léo | `vanne_thermo_leo` | sonde `t_hr` | Léo | 19,5 / 17 / 15 |
-| Chambre Pablo | `vt` | sonde `sonoff_t_hr_2` | Pablo | 19,5 / 17 / 15 |
-| Salle de bains enfants | `sonoff_trvzb` | **ses vannes** | Léo, Pablo | 21 / 18 / 15 |
-| Chambre Lolo | **aucune** — clim seule | sonde `sonoff_snzb_02d` | Lolo | 19,5 / 17 / 15 |
-| Boulangerie | `vt_boulangerie` (+ poêle) | **sa vanne** | Lolo | 19 / 16 / 15 |
-| Cuisine | `vtherrmo_cuisine_1`, `vt_cuisine_couloir` | Lyric T6 | tous | 19 / 16,5 / 15 |
-| Salon | `vt_salon_aquarium`, `vt_salon_canape` | **ses vannes** | tous | 20,5 / 17,5 / 15 |
+| Chambre Léo | `vanne_thermo_leo` | sonde `t_hr` | Léo | 19,5 °C |
+| Chambre Pablo | `vt` | sonde `sonoff_t_hr_2` | Pablo | 19,5 °C |
+| Salle de bains enfants | `sonoff_trvzb` | **ses vannes** | Léo, Pablo | 21 °C |
+| Chambre Lolo | **aucune** — clim seule | sonde `sonoff_snzb_02d` | Lolo | — (clim) |
+| Boulangerie | `vt_boulangerie` (+ poêle) | **sa vanne** | Lolo | 19 °C |
+| Cuisine | `vtherrmo_cuisine_1`, `vt_cuisine_couloir` | Lyric T6 | tous | 19 °C |
+| Salon | `vt_salon_aquarium`, `vt_salon_canape` | **ses vannes** | tous | 20,5 °C |
 
 ### Trois sondes pour sept pièces
 
@@ -209,10 +212,12 @@ Pour chaque pièce, la consigne est choisie par ordre de priorité décroissant 
 
 | Priorité | Condition | Consigne |
 |---|---|---|
-| 1 | Bouton confort de la pièce pressé | Confort |
-| 2 | Un occupant présent **et** horaire actif | Confort |
-| 3 | Un occupant présent, hors horaire | Nuit |
-| 4 | Aucun occupant présent | Absence (15 °C) |
+| 1 | Confort immédiat demandé | Confort |
+| 2 | « Chauffer la pièce » coché, occupant présent **et** horaire actif | Température de la plage, sinon Confort |
+| 3 | Tout le reste : hors horaire, occupant absent, ou pièce décochée | **Nuit**, commune à toutes les pièces (15 °C) |
+
+Un réglage fait sur une vanne passe devant, jusqu'au prochain changement de
+plage (voir plus bas).
 
 La présence prime donc sur la parité de semaine : si Léo est là un mercredi
 de semaine paire, il suffit d'appuyer sur son bouton pour que sa chambre et
@@ -248,19 +253,24 @@ ha core check && ha core restart
 - **Vue d'ensemble** — pour chaque pièce : mesure, consigne en cours, et
   horaire suivi (commun ou propre), avec son état.
 - **Léo / Pablo / Laurent** — présence de chacun. Éteindre Léo ramène sa
-  chambre à la température d'absence ; la salle de bains enfants reste
+  chambre à la température de nuit ; la salle de bains enfants reste
   chaude tant que Pablo est présent, puisqu'elle a deux occupants.
-- **Une carte par pièce** — températures de confort et de nuit réglables, et
-  un bouton qui force le confort immédiatement, puis se coupe seul au bout de
+- **Une carte par pièce** — cadran de température, confort réglable, bouton
+  **« Chauffer la pièce »** (décoché : la pièce reste à la nuit), et un
+  bouton qui force le confort immédiatement, puis se coupe seul au bout de
   la durée réglée (2 h par défaut).
 - **Horaires** — voir ci-dessous.
 
 ### Réglages par pièce
 
-Chaque pièce à radiateur a deux réglages, `input_number.chauffage_<pièce>_confort`
-et `_nuit`. Les valeurs du bloc `pieces` ne servent plus que de repli, si un
-réglage est indisponible. La température d'absence, elle, est commune à
-toute la maison (`input_number.chauffage_absence`).
+Chaque pièce à radiateur a son confort, `input_number.chauffage_<pièce>_confort`
+(la valeur du bloc `pieces` ne sert que de repli), et son bouton
+**« Chauffer la pièce »**, `input_boolean.chauffage_<pièce>_actif`.
+
+La température de **nuit est unique** pour toutes les pièces à vannes,
+`input_number.chauffage_nuit` (15 °C) : elle s'applique hors horaire, en
+l'absence des occupants, et aux pièces décochées. Elle remplace les anciens
+réglages de nuit par pièce et la température d'absence.
 
 La chambre de Lolo n'a pas ces réglages : sa clim n'y chauffe pas, sauf à
 activer l'appoint chauffage. Elle maintient une température minimale, et
@@ -279,8 +289,8 @@ temperature: 24
 Pendant cette plage, la pièce vise 24 °C, si l'un de ses occupants est
 présent. Exemple pour la salle de bains enfants : 6 h - 8 h à 24 °C,
 8 h - 19 h à 15 °C, 19 h - 21 h à 22 °C. Une plage sans température prend le
-curseur *Confort* de la pièce ; hors de toute plage, c'est la température de
-*Nuit* ; sans occupant, celle d'absence. Le « confort immédiat » l'emporte
+curseur *Confort* de la pièce ; hors de toute plage, sans occupant, ou si la
+pièce est décochée, c'est la température de *nuit*, commune à toutes. Le « confort immédiat » l'emporte
 sur une plage plus froide. L'horaire de la clim accepte la même donnée.
 
 HA lit ces données dans les attributs de la planification, qui expose ceux
@@ -568,7 +578,7 @@ simultanément.
 | Pièce avec radiateur et clim, appoint activé, extérieur ≥ seuil PAC, demande en cours | Clim |
 | Tous les autres cas | Radiateur |
 
-Une pièce confiée à la clim voit sa vanne retomber à la consigne d'absence et
+Une pièce confiée à la clim voit sa vanne retomber à la température de nuit et
 cesse de compter dans la demande chaudière.
 
 ### Quota Comfort Cloud

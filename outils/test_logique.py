@@ -88,6 +88,7 @@ class Monde:
         'input_number.clim_consigne_ete': 25,
         'input_select.clim_duree_assechement': '1 h',
         'input_number.clim_consigne_horaire': 19,
+        'input_number.chauffage_nuit': 15,
         'input_number.clim_temp_min': 15,
         'input_number.chaudiere_consigne_marche': 24,
         'input_number.chaudiere_consigne_arret': 10,
@@ -98,7 +99,7 @@ class Monde:
                  clim_froid=False, clim_chaud=False, assechement=False,
                  temp_min=True, clim_etat='off', clim_consigne=24.0, dernier='',
                  sondes_indispo=(), reglages=None, horaires=None, depuis=None,
-                 grilles=None, plages=None, derogations=''):
+                 grilles=None, plages=None, derogations='', coupees=()):
         # Valeurs par défaut conformes à l'installation : maintien d'une
         # température minimale, assèchement seulement sur demande, froid et
         # appoint chauffage désactivés.
@@ -119,6 +120,8 @@ class Monde:
         self.plages = plages or {}
         # Contenu brut de input_text.chauffage_derogations.
         self.derogations = derogations
+        # Pièces dont le bouton « Chauffer la pièce » est décoché.
+        self.coupees = set(coupees)
         self.temp_min, self.clim_etat, self.clim_consigne = temp_min, clim_etat, clim_consigne
         # Mémoire du dernier ordre de HA (input_text.clim_dernier_ordre).
         self.dernier = dernier
@@ -173,6 +176,9 @@ class Monde:
             return 'on' if self.clim[eid.rsplit('_', 1)[1]] else 'off'
         if eid.startswith('input_boolean.presence_'):
             return 'on' if eid.split('presence_')[1] in self.presents else 'off'
+        if eid.startswith('input_boolean.chauffage_') and eid.endswith('_actif'):
+            piece = eid[len('input_boolean.chauffage_'):-len('_actif')]
+            return 'off' if piece in self.coupees else 'on'
         if eid.startswith('input_boolean.confort_'):
             return 'on' if eid.split('confort_')[1] in self.boosts else 'off'
         return 'unknown'
@@ -560,7 +566,7 @@ verifier("semaine impaire : chambre Léo au confort", m.consignes['chambre_leo']
 verifier("semaine impaire : SdB enfants au confort", m.consignes['sdb_enfants'], 21.0)
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], horaire=False, semaine=41))
-verifier("hors horaire : repli de nuit", m.consignes['chambre_leo'], 17.0)
+verifier("hors horaire : nuit (15°, commune)", m.consignes['chambre_leo'], 15.0)
 
 titre("Réglages par pièce")
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
@@ -569,12 +575,13 @@ verifier("confort de Léo réglé à 21° : pris en compte", m.consignes['chambr
 verifier("  -> sans toucher à Pablo", m.consignes['chambre_pablo'], 19.5)
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=False,
-                  reglages={'input_number.chauffage_salon_nuit': 16.0}))
-verifier("nuit du salon réglée à 16° : prise en compte", m.consignes['salon'], 16.0)
+                  reglages={'input_number.chauffage_nuit': 16.0}))
+verifier("nuit réglée à 16° : vaut pour toutes les pièces",
+         {m.consignes[p] for p in ('salon', 'cuisine', 'chambre_leo', 'sdb_enfants')}, {16.0})
 
 m = evaluer(Monde(presents=['laurent'], semaine=40,
-                  reglages={'input_number.chauffage_absence': 16.5}))
-verifier("absence réglée à 16,5° : appliquée aux chambres vides",
+                  reglages={'input_number.chauffage_nuit': 16.5}))
+verifier("nuit réglée à 16,5° : appliquée aussi aux chambres vides",
          m.consignes['chambre_leo'], 16.5)
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41))
@@ -590,7 +597,7 @@ m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=True
                   horaires={'schedule.chauffage_commun': 'off'}))
 verifier("horaire commun créé : il remplace celui par défaut",
          m.horaires_utilises['salon'], 'schedule.chauffage_commun')
-verifier("  -> commun hors horaire : salon en nuit", m.consignes['salon'], 17.5)
+verifier("  -> commun hors horaire : salon en nuit", m.consignes['salon'], 15.0)
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=True,
                   horaires={'schedule.chauffage_commun': 'off',
@@ -598,7 +605,7 @@ m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41, horaire=True
 verifier("horaire propre au salon : il prime sur le commun",
          m.horaires_utilises['salon'], 'schedule.chauffage_salon')
 verifier("  -> salon au confort", m.consignes['salon'], 20.5)
-verifier("  -> la cuisine reste sur le commun, en nuit", m.consignes['cuisine'], 16.5)
+verifier("  -> la cuisine reste sur le commun, en nuit", m.consignes['cuisine'], 15.0)
 
 m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
                   horaires={'schedule.chauffage_commun': 'unavailable'}))
@@ -621,7 +628,7 @@ verifier("  -> confort immédiat pendant cette plage : confort (21°)",
 m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_sdb_enfants': 'on'}))
 verifier("plage sans température : curseur confort", m.consignes['sdb_enfants'], 21.0)
 m = evaluer(Monde(presents=tous, horaires={'schedule.chauffage_sdb_enfants': 'off'}))
-verifier("hors de toute plage : nuit", m.consignes['sdb_enfants'], 18.0)
+verifier("hors de toute plage : nuit", m.consignes['sdb_enfants'], 15.0)
 m = evaluer(Monde(presents=['laurent'], horaires={'schedule.chauffage_sdb_enfants': 'on'},
                   plages={'schedule.chauffage_sdb_enfants': 24}))
 verifier("plage à 24° mais enfants absents : absence (15°)", m.consignes['sdb_enfants'], 15.0)
@@ -633,6 +640,27 @@ m = evaluer(Monde(presents=['laurent'], temps={'chambre_laurent': 18.0},
                   horaires={'schedule.clim_chambre': 'on'}, plages={'schedule.clim_chambre': 21}))
 verifier("clim : plage à 21° de son horaire", m.ordres['chambre_laurent']['temp'], 21.0)
 
+titre("Bouton « Chauffer la pièce »")
+m = evaluer(Monde(presents=tous, coupees=['salon'], horaires={'schedule.chauffage_commun': 'on'}))
+verifier("salon décoché, pendant l'horaire, tout le monde là : nuit (15°)",
+         m.consignes['salon'], 15.0)
+verifier("  -> les autres pièces suivent l'horaire", m.consignes['cuisine'], 19.0)
+m = evaluer(Monde(presents=tous, coupees=['sdb_enfants'],
+                  horaires={'schedule.chauffage_sdb_enfants': 'on'},
+                  plages={'schedule.chauffage_sdb_enfants': 24}))
+verifier("SdB décochée, plage à 24° : reste à la nuit", m.consignes['sdb_enfants'], 15.0)
+m = evaluer(Monde(presents=tous, coupees=['salon'], boosts=['salon']))
+verifier("salon décoché mais confort immédiat demandé : confort", m.consignes['salon'], 20.5)
+m = evaluer(Monde(presents=tous, coupees=['salon'], derogations='{"salon": [21.0, 15.0]}'))
+verifier("salon décoché mais vanne montée à 21° : la vanne l'emporte", m.consignes['salon'], 21.0)
+m = evaluer(Monde(presents=tous, coupees=['salon'],
+                  temps={**{p: 25.0 for p in PIECES}, 'salon': 17.0}))
+verifier("salon décoché à 17° : ne réclame pas la chaudière", rendre(TPL_DEMANDE, m), 'False')
+verifier("chaque pièce à vannes a son bouton",
+         sorted(c[len('chauffage_'):-len('_actif')] for c in chauffage['input_boolean']
+                if c.startswith('chauffage_') and c.endswith('_actif')),
+         sorted(p for p, c in PIECES.items() if c['vannes']))
+
 titre("Réglage fait sur une vanne")
 m = evaluer(Monde(presents=tous, derogations='{"salon": [22.0, 20.5]}'))
 verifier("salon réglé à 22° sur la vanne (base 20,5°) : consigne 22°", m.consignes['salon'], 22.0)
@@ -640,8 +668,8 @@ verifier("  -> signalé comme dérogation", m.derogees, ['salon'])
 verifier("  -> la base reste connue", m.bases['salon'], 20.5)
 verifier("  -> les autres pièces ne bougent pas", m.consignes['cuisine'], 19.0)
 m = evaluer(Monde(presents=tous, horaire=False, derogations='{"salon": [22.0, 20.5]}'))
-verifier("changement de plage (base passe à 17,5°) : la dérogation tombe",
-         (m.consignes['salon'], m.derogees), (17.5, []))
+verifier("changement de plage (base passe à la nuit) : la dérogation tombe",
+         (m.consignes['salon'], m.derogees), (15.0, []))
 m = evaluer(Monde(presents=tous, derogations='', temps={p: 20.0 for p in PIECES}))
 verifier("aucune dérogation : texte vide accepté", m.derogees, [])
 
@@ -686,10 +714,10 @@ verifier("deuxième pièce réglée : les deux dérogations coexistent",
 
 menage = next(a for a in chauffage['automation'] if a['id'] == 'chauffage_derogation_fin')
 m = evaluer(Monde(presents=tous, horaire=False,
-                  derogations='{"salon": [22.0, 20.5], "chambre_leo": [16.0, 17.0]}'))
+                  derogations='{"salon": [22.0, 20.5], "chambre_leo": [18.0, 15.0]}'))
 restantes = json.loads(rendre(menage['variables']['restantes'], m))
 verifier("ménage : dérogation périmée retirée, celle encore valable gardée",
-         restantes, {'chambre_leo': [16.0, 17.0]})
+         restantes, {'chambre_leo': [18.0, 15.0]})
 
 titre("Pièces communes")
 m = evaluer(Monde(presents=['leo'], semaine=41))
@@ -960,7 +988,7 @@ m = evaluer(Monde(presents=['leo', 'pablo', 'laurent'], semaine=41,
                   temps=froid, clim_chaud=True))
 double = [p for p in PIECES
           if m.relais.get(p) == 'clim'
-          and m.consignes.get(p, 0) > PIECES[p]['absence']
+          and m.consignes.get(p, 0) > 15.0
           and PIECES[p]['vannes']]
 verifier("aucune pièce chauffée par les deux sources à la fois", double, [])
 verifier("état du capteur = consigne maximale", rendre(TPL_ETAT, m), '21.0')
