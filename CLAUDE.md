@@ -140,9 +140,17 @@ leurs deux chambres et la salle de bains restent à la température de nuit
   rempli chaque minute par `schedule.get_schedule` ; une planification
   n'expose sinon que son `next_event`.
 
+## Accès à distance
+
+Add-on Tailscale réparé le 27/09/2026 : il s'arrêtait aussitôt démarré parce
+que l'option `share_homeassistant` était sur Funnel, non activé sur le compte.
+Option passée à `disabled` ; expiration de la clé désactivée dans la console
+Tailscale. Depuis l'iPhone (Tailscale actif) : `http://100.123.3.104:8123`.
+Ne pas réactiver Funnel : il publierait HA sur Internet.
+
 ## En suspens
 
 - Lyric T6 à passer en maintien permanent.
 - Créer dans l'interface les planifications `Chauffage commun` et
   `Clim chambre`.
-- Add-on Tailscale qui ne redémarre plus ; statut d'un éventuel essai Nabu Casa.
+- Statut d'un éventuel essai Nabu Casa (inutile : Tailscale suffit).

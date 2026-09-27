@@ -612,7 +612,6 @@ et la demande chaudière. À relancer après toute modification du bloc
   `Clim chambre`.
 - Racheter des sondes d'ambiance : salle de bains enfants d'abord, puis
   salon et boulangerie. En attendant, calibrer leurs vannes.
-- Réparer l'add-on Tailscale, qui ne redémarre plus, pour retrouver l'accès
-  à distance ; vérifier l'état d'un éventuel essai Nabu Casa.
+- Vérifier l'état d'un éventuel essai Nabu Casa (inutile : Tailscale suffit).
 - Affiner `clim_seuil_pac` avec les prix réels de l'électricité et du mazout,
   si l'appoint chauffage est un jour activé.
