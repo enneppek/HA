@@ -146,7 +146,20 @@ Add-on Tailscale réparé le 27/09/2026 : il s'arrêtait aussitôt démarré par
 que l'option `share_homeassistant` était sur Funnel, non activé sur le compte.
 Option passée à `disabled` ; expiration de la clé désactivée dans la console
 Tailscale. Depuis l'iPhone (Tailscale actif) : `http://100.123.3.104:8123`.
-Ne pas réactiver Funnel : il publierait HA sur Internet.
+
+Le 27/09/2026, Laurent a choisi, en connaissance de cause, d'ouvrir HA sur
+Internet par Funnel pour y accéder depuis le navigateur du travail (gratuit,
+sans rien installer) : `https://homeassistant.tail3f76d2.ts.net`. Réglages
+faits par lui :
+- HA 2026.9.3, double authentification (TOTP) activée sur son compte ;
+- Paramètres > Système > Réseau > Serveur HTTP : X-Forwarded-For de
+  confiance, proxy de confiance `127.0.0.1` (pas de bloc `http:` en YAML) ;
+- module Tailscale : `share_homeassistant: funnel` ;
+- console Tailscale : HTTPS activé, et `tag:homeassistant` ajouté à la cible
+  de l'attribut `funnel` (`nodeAttrs`) — le nœud HA porte cette étiquette,
+  donc n'appartient pas à `autogroup:member`. C'était la cause du
+  « Funnel support is disabled ».
+Pour fermer l'accès public : `share_homeassistant: disabled`.
 
 ## En suspens
 
@@ -154,3 +167,8 @@ Ne pas réactiver Funnel : il publierait HA sur Internet.
 - Créer dans l'interface les planifications `Chauffage commun` et
   `Clim chambre`.
 - Statut d'un éventuel essai Nabu Casa (inutile : Tailscale suffit).
+- Compteur P1 HomeWizard hors ligne depuis le 17/09/2026, voyant éteint :
+  plus alimenté. Tester avec un chargeur USB, sinon port P1 à rouvrir chez
+  le gestionnaire de réseau.
+- Vanne `vtherrmo_cuisine_1` : entité « valeur du capteur de température
+  externe » trouvée désactivée ; vérifier qu'elle reçoit bien la sonde du T6.
