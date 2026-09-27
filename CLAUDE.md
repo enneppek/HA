@@ -170,5 +170,5 @@ Pour fermer l'accès public : `share_homeassistant: disabled`.
 - Compteur P1 HomeWizard hors ligne depuis le 17/09/2026, voyant éteint :
   plus alimenté. Tester avec un chargeur USB, sinon port P1 à rouvrir chez
   le gestionnaire de réseau.
-- Vanne `vtherrmo_cuisine_1` : entité « valeur du capteur de température
+- Une des deux vannes de la cuisine : entité « valeur du capteur de température
   externe » trouvée désactivée ; vérifier qu'elle reçoit bien la sonde du T6.
